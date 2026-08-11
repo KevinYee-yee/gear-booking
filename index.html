@@ -134,7 +134,7 @@
       <div class="field"><label>借用人 *</label><input id="rmName" placeholder="姓名"></div>
       <div class="field"><label>部門 *</label><input id="rmDept" placeholder="所屬部門"></div>
     </div>
-    <div class="field"><label>聯絡方式</label><input id="rmContact" placeholder="分機 / Email / 手機"></div>
+    <div class="field"><label>Email（用於接收核准/拒絕通知）*</label><input type="email" id="rmContact" placeholder="you@company.com"></div>
     <div class="field"><label>用途</label><textarea id="rmPurpose" rows="2" placeholder="拍攝專案、地點…"></textarea></div>
     <div class="actions">
       <button class="btn" onclick="closeModal('resvModal')">取消</button>
@@ -318,8 +318,7 @@ function renderAdmin(){
     <div class="item">
       <div class="grow"><div class="t">${r['器材名稱']}</div>
         <div class="meta">${r['借用人']} · ${r['部門']} ｜ ${r['借出日']} → ${r['歸還日']}
-          ${r['聯絡方式']?`｜ ${r['聯絡方式']}`:''}${r['用途']?`<br>用途：${r['用途']}`:''}
-          ${r['申請人Email']?`<br>🔒 登入身分：${r['申請人Email']}`:''}</div></div>
+          ${r['聯絡方式']?`｜ ✉️ ${r['聯絡方式']}`:''}${r['用途']?`<br>用途：${r['用途']}`:''}</div></div>
       <button class="btn sm gd" onclick="review('${r.id}','approve')">核准</button>
       <button class="btn sm rd" onclick="review('${r.id}','reject')">拒絕</button>
     </div>`).join('') : `<div class="empty">沒有待審核申請</div>`;
@@ -389,6 +388,7 @@ document.getElementById('rmSubmit').onclick = async ()=>{
     用途: document.getElementById('rmPurpose').value.trim(),
   };
   if(!p.借出日||!p.歸還日||!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
+  if(!p.聯絡方式 || p.聯絡方式.indexOf('@')<0) return toast('請填寫有效的 Email 以接收通知','err');
   toast('送出中…');
   const r = await api('create_reservation', p, true);
   if(r.ok){ closeModal('resvModal'); toast('申請已送出，等待審核','ok'); load(); }

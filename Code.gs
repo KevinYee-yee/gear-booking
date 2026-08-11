@@ -9,15 +9,20 @@
  *   狀態值：可借用 / 維修中 / 報廢
  *
  * 工作表「預約」欄位（第 1 列為標題）：
- *   A:id  B:器材id  C:器材名稱  D:借用人  E:部門  F:聯絡方式
- *   G:借出日  H:歸還日  I:用途  J:狀態  K:申請時間  L:審核備註  M:申請人Email
+ *   A:id  B:器材id  C:器材名稱  D:借用人  E:部門  F:聯絡方式(Email)
+ *   G:借出日  H:歸還日  I:用途  J:狀態  K:申請時間  L:審核備註
  *   狀態值：待審核 / 已核准 / 已拒絕 / 已歸還 / 已取消
- *   申請人Email：系統自動抓登入者公司帳號（部署為「機構內任何人」時有效），防造假
+ *   聯絡方式(Email)：申請人填的 email，用來寄核准/拒絕通知
  */
 
 // ====== 設定 ======
 // 管理員 PIN：請改成你自己的密碼，管理端操作需要它
 var ADMIN_PIN = '1234';
+
+// Email 通知設定
+var NOTIFY = true;              // 是否開啟 email 通知
+var ADMIN_EMAIL = '';           // 收「新申請通知」的信箱；留空＝寄給指令碼擁有者（你）
+var APP_URL = 'https://kevinyee-yee.github.io/gear-booking/'; // 通知信附上的系統連結
 
 var SHEET_EQUIP = '器材';
 var SHEET_RESV  = '預約';
@@ -87,16 +92,25 @@ function apiCreateReservation(p) {
     return { ok: false, error: '該時段已被核准借用（' + conflict['借出日'] + ' ~ ' + conflict['歸還日'] + '），請改期' };
   }
 
-  var email = '';
-  try { email = Session.getActiveUser().getEmail() || ''; } catch (e) {}
-
   var sh = sheet(SHEET_RESV);
   var id = 'R' + new Date().getTime();
   sh.appendRow([
     id, p['器材id'], equip.data['名稱'], p['借用人'], p['部門'],
     p['聯絡方式'] || '', p['借出日'], p['歸還日'], p['用途'] || '',
-    '待審核', new Date(), '', email
+    '待審核', new Date(), ''
   ]);
+
+  // 通知管理員有新申請
+  notify(getAdminEmail(),
+    '【器材預約】新申請待審核：' + equip.data['名稱'],
+    '有一筆新的器材預約申請，請審核：\n\n' +
+    '器材：' + equip.data['名稱'] + '\n' +
+    '借用人：' + p['借用人'] + '（' + p['部門'] + '）\n' +
+    '期間：' + p['借出日'] + ' ~ ' + p['歸還日'] + '\n' +
+    '用途：' + (p['用途'] || '—') + '\n' +
+    '聯絡：' + (p['聯絡方式'] || '—') + '\n\n' +
+    '前往審核：' + APP_URL);
+
   return { ok: true, id: id };
 }
 
@@ -120,16 +134,31 @@ function apiReview(p) {
   if (!r.row) return { ok: false, error: '找不到申請' };
   if (r.data['狀態'] !== '待審核') return { ok: false, error: '此申請不是待審核狀態' };
 
+  var approved;
   if (p.decision === 'approve') {
     var conflict = findConflict(r.data['器材id'], r.data['借出日'], r.data['歸還日'], p['id']);
     if (conflict) {
       return { ok: false, error: '撞期！已有核准借用（' + conflict['借出日'] + ' ~ ' + conflict['歸還日'] + '），無法核准' };
     }
     setCell(SHEET_RESV, r.row, '狀態', '已核准');
+    approved = true;
   } else {
     setCell(SHEET_RESV, r.row, '狀態', '已拒絕');
+    approved = false;
   }
-  if (p['審核備註'] != null) setCell(SHEET_RESV, r.row, '審核備註', p['審核備註']);
+  var note = (p['審核備註'] != null) ? p['審核備註'] : '';
+  if (p['審核備註'] != null) setCell(SHEET_RESV, r.row, '審核備註', note);
+
+  // 通知申請人結果（聯絡方式須為 email）
+  notify(r.data['聯絡方式'],
+    '【器材預約】' + (approved ? '已核准' : '未通過') + '：' + r.data['器材名稱'],
+    r.data['借用人'] + ' 您好，\n\n' +
+    '您申請的器材預約' + (approved ? '已核准 ✅' : '未通過 ❌') + '：\n\n' +
+    '器材：' + r.data['器材名稱'] + '\n' +
+    '期間：' + r.data['借出日'] + ' ~ ' + r.data['歸還日'] + '\n' +
+    (note ? '備註：' + note + '\n' : '') +
+    (approved ? '\n請於借出日前往領取器材。' : '\n如有疑問請聯繫器材管理人員。') + '\n\n' + APP_URL);
+
   return { ok: true };
 }
 
@@ -250,6 +279,32 @@ function requireFields(p, fields) {
   }
 }
 
+// ====== Email 通知 ======
+function getAdminEmail() {
+  if (ADMIN_EMAIL) return ADMIN_EMAIL;
+  try { return Session.getEffectiveUser().getEmail(); } catch (e) { return ''; }
+}
+
+function notify(to, subject, body) {
+  if (!NOTIFY) return;
+  if (!to || String(to).indexOf('@') < 0) return; // 非有效 email 就跳過
+  try {
+    MailApp.sendEmail({ to: String(to), subject: subject, body: body });
+  } catch (e) {
+    // 寄信失敗不影響主流程（例如配額用盡）
+  }
+}
+
+/**
+ * 測試 Email：在編輯器選這個函式按執行，會寄一封測試信到管理員信箱，
+ * 並在第一次觸發時要求授權寄信權限（請允許）。
+ */
+function testEmail() {
+  var to = getAdminEmail();
+  MailApp.sendEmail(to, '【器材預約】Email 通知測試', '這是一封測試信，收到代表通知功能正常運作。\n\n系統：' + APP_URL);
+  Logger.log('已寄出測試信至：' + to);
+}
+
 function json(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
@@ -271,6 +326,6 @@ function setupSheets() {
 
   var rv = ss.getSheetByName(SHEET_RESV) || ss.insertSheet(SHEET_RESV);
   rv.clear();
-  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註','申請人Email']);
+  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註']);
   rv.setFrozenRows(1);
 }
