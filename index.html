@@ -68,6 +68,9 @@
   .variants{display:flex;flex-direction:column;gap:8px;margin-top:8px;border-top:1px dashed var(--line);padding-top:10px}
   .vrow{display:flex;align-items:center;gap:10px}
   .vrow .vn{flex:1;font-size:14px}
+  .vrow input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer;flex:0 0 auto}
+  .cbspace{width:18px;flex:0 0 auto}
+  .selbar{justify-content:flex-end;border-top:1px dashed var(--line);padding-top:10px;margin-top:2px}
 
   .rowlist{display:flex;flex-direction:column;gap:10px}
   .item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
@@ -223,6 +226,7 @@ let filterCat='全部', searchQ='';
 let viewMode=localStorage.getItem('gear_viewmode')||'card';
 let expanded={};           // 器材群組展開狀態
 let expandedResv={};       // 預約專案卡展開狀態
+let adGroups=[], myGroups=[]; // 目前渲染的預約分組（管理端 / 查詢）
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -286,21 +290,27 @@ function buildUnits(items){
   return units;
 }
 
-// ---- 預約分組（同一次申請＝一個批次＝一張專案卡）----
+// ---- 預約分組：同「專案名稱」歸成一個父資料夾（無名稱者退回批次/單筆）----
 function groupResv(list){
   const g={}, order=[];
   list.forEach(r=>{
-    const key=r['批次']||r['id'];   // 舊資料無批次者，各自成組
+    const name=(r['用途']||'').trim();
+    const key=name?('P:'+name):('B:'+(r['批次']||r['id']));
     if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],借出日:r['借出日'],歸還日:r['歸還日'],items:[]};order.push(key);}
-    g[key].items.push(r);
+    const gg=g[key]; gg.items.push(r);
+    if(String(r['借出日'])<String(gg.借出日)) gg.借出日=r['借出日'];   // 期間取涵蓋範圍
+    if(String(r['歸還日'])>String(gg.歸還日)) gg.歸還日=r['歸還日'];
+    if(r['借用人']!==gg.借用人) gg._multi=true;
   });
   return order.map(k=>g[k]);
 }
+function grpBorrower(g){return g._multi?'多位借用人':g['借用人'];}
+function grpPending(g){return g.items.filter(i=>i['狀態']==='待審核');}
 function statusSummary(items){
   const c={}; items.forEach(i=>c[i['狀態']]=(c[i['狀態']]||0)+1);
   return Object.keys(c).map(s=>`${c[s]} ${s}`).join('・');
 }
-function toggleResv(k){expandedResv[k]=!expandedResv[k];render();}
+function toggleResvIdx(idx,scope){const arr=scope==='ad'?adGroups:myGroups;const g=arr[idx];if(!g)return;const k=scope+'::'+g.key;expandedResv[k]=!expandedResv[k];render();}
 
 // ---- 渲染 ----
 function render(){
@@ -448,18 +458,18 @@ function calendarView(items){
 }
 
 function renderMyResv(){
-  const groups=groupResv(DATA.reservations).reverse();
-  if(!groups.length) return `<div class="empty">目前沒有任何預約紀錄</div>`;
-  return `<div class="sec-title">全部預約 / 借用紀錄</div><div class="rowlist">${groups.map(g=>{
-    const key='my_'+g.key, open=expandedResv[key];
-    const title=g['用途']||`${g['借用人']} 的借用`;
+  myGroups=groupResv(DATA.reservations).reverse();
+  if(!myGroups.length) return `<div class="empty">目前沒有任何預約紀錄</div>`;
+  return `<div class="sec-title">全部預約 / 借用紀錄</div><div class="rowlist">${myGroups.map((g,idx)=>{
+    const open=expandedResv['my::'+g.key];
+    const title=g['用途']||`${grpBorrower(g)} 的借用`;
     const items=g.items.map(r=>`<div class="vrow"><span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}${r['審核備註']?` <span class="meta">（${r['審核備註']}）</span>`:''}</span>${['待審核','已核准'].includes(r['狀態'])?`<button class="btn sm rd" onclick="cancelResv('${r.id}')">取消</button>`:''}</div>`).join('');
     return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span class="caret ${open?'open':''}" onclick="toggleResv('${key}')">▶</span>
-        <div class="grow" onclick="toggleResv('${key}')" style="cursor:pointer">
+        <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'my')">▶</span>
+        <div class="grow" onclick="toggleResvIdx(${idx},'my')" style="cursor:pointer">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span></div>
-          <div class="meta">${g['借用人']} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']} ｜ ${statusSummary(g.items)}</div></div>
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']} ｜ ${statusSummary(g.items)}</div></div>
       </div>
       ${open?`<div class="variants">${items}</div>`:''}
     </div>`;
@@ -473,21 +483,28 @@ function renderAdmin(){
   const groups=groupResv(live);
   groups.sort((a,b)=>{const ap=a.items.some(i=>i['狀態']==='待審核'),bp=b.items.some(i=>i['狀態']==='待審核');return (bp?1:0)-(ap?1:0);});
   const pendingTotal=DATA.reservations.filter(r=>r['狀態']==='待審核').length;
-  const gHtml=groups.length?groups.map(g=>{
-    const key='ad_'+g.key, open=expandedResv[key];
-    const pend=g.items.filter(i=>i['狀態']==='待審核');
+  adGroups=groups;
+  const gHtml=groups.length?groups.map((g,idx)=>{
+    const open=expandedResv['ad::'+g.key];
+    const pend=grpPending(g);
     const overdue=g.items.some(i=>i['狀態']==='已核准'&&String(i['歸還日'])<now);
-    const title=g['用途']||`${g['借用人']} 的借用`;
-    const items=g.items.map(r=>`<div class="vrow"><span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}</span>${r['狀態']==='待審核'?`<button class="btn sm gd" onclick="review('${r.id}','approve')">核准</button><button class="btn sm rd" onclick="review('${r.id}','reject')">拒絕</button>`:r['狀態']==='已核准'?`<button class="btn sm" onclick="markReturn('${r.id}')">登記歸還</button>`:''}</div>`).join('');
+    const title=g['用途']||`${grpBorrower(g)} 的借用`;
+    const items=g.items.map(r=>{
+      const isPend=r['狀態']==='待審核';
+      const cb=isPend?`<input type="checkbox" class="chk_ad_${idx}" data-id="${r.id}" checked>`:`<span class="cbspace"></span>`;
+      const act=r['狀態']==='已核准'?`<button class="btn sm" onclick="markReturn('${r.id}')">登記歸還</button>`:'';
+      return `<div class="vrow">${cb}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}</span>${act}</div>`;
+    }).join('');
+    const selBar=pend.length>1?`<div class="vrow selbar"><span class="meta">勾選你要的項目後：</span><button class="btn sm gd" onclick="reviewSelected(${idx},'approve')">批准勾選</button><button class="btn sm rd" onclick="reviewSelected(${idx},'reject')">拒絕勾選</button></div>`:'';
     return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span class="caret ${open?'open':''}" onclick="toggleResv('${key}')">▶</span>
-        <div class="grow" onclick="toggleResv('${key}')" style="cursor:pointer;min-width:180px">
+        <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'ad')">▶</span>
+        <div class="grow" onclick="toggleResvIdx(${idx},'ad')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span>${overdue?' <span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
-          <div class="meta">${g['借用人']} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''} ｜ ${statusSummary(g.items)}</div></div>
-        ${pend.length?`<button class="btn sm gd" onclick="approveGroup('${g.key}')">統一核准 (${pend.length})</button>`:''}
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''} ｜ ${statusSummary(g.items)}</div></div>
+        ${pend.length?`<button class="btn sm gd" onclick="approveAll(${idx})">全部批准</button><button class="btn sm rd" onclick="rejectAll(${idx})">全部拒絕</button>`:''}
       </div>
-      ${open?`<div class="variants">${items}</div>`:''}
+      ${open?`<div class="variants">${items}${selBar}</div>`:''}
     </div>`;
   }).join(''):`<div class="empty">沒有進行中的預約</div>`;
   const eHtml=DATA.equipment.map(e=>`
@@ -594,15 +611,33 @@ async function cancelResv(id){ if(!confirm('確定取消？'))return; const r=aw
 // ---- 管理端 ----
 document.getElementById('pinSubmit').onclick=()=>{const v=document.getElementById('pinInput').value.trim();if(!v)return;ADMIN_PIN=v;sessionStorage.setItem('gear_pin',v);closeModal('pinModal');render();};
 async function review(id,decision){const note=decision==='reject'?(prompt('拒絕原因（可留空）：')||''):'';const r=await api('review',{id,decision,pin:ADMIN_PIN,審核備註:note},true);r.ok?(toast(decision==='approve'?'已核准':'已拒絕','ok'),load()):toast(r.error,'err');}
-async function approveGroup(gkey){
-  const live=DATA.reservations.filter(r=>!['已歸還','已拒絕','已取消'].includes(r['狀態']));
-  const g=groupResv(live).find(x=>x.key===gkey); if(!g) return;
-  const pend=g.items.filter(i=>i['狀態']==='待審核'); if(!pend.length) return;
-  if(!confirm(`統一核准「${g['用途']||g['借用人']}」的 ${pend.length} 項？`)) return;
-  toast('核准中…');
+async function doReview(ids,decision,note){
+  if(!ids.length) return;
+  toast(decision==='approve'?'核准中…':'處理中…');
   let fail=0,msg='';
-  for(const it of pend){const r=await api('review',{id:it.id,decision:'approve',pin:ADMIN_PIN},true);if(!r.ok){fail++;msg=r.error;}}
-  toast(fail?`${fail} 項未成功：${msg}`:'已全部核准',fail?'err':'ok'); load();
+  for(const id of ids){const r=await api('review',{id,decision,pin:ADMIN_PIN,審核備註:note||''},true);if(!r.ok){fail++;msg=r.error;}}
+  toast(fail?`${fail} 項未成功：${msg}`:(decision==='approve'?'已全部核准':'已處理'),fail?'err':'ok');
+  load();
+}
+function approveAll(idx){
+  const g=adGroups[idx]; if(!g) return;
+  const ids=grpPending(g).map(i=>i.id); if(!ids.length) return;
+  if(!confirm(`全部批准「${g['用途']||grpBorrower(g)}」的 ${ids.length} 項？`)) return;
+  doReview(ids,'approve');
+}
+function rejectAll(idx){
+  const g=adGroups[idx]; if(!g) return;
+  const ids=grpPending(g).map(i=>i.id); if(!ids.length) return;
+  const note=prompt(`全部拒絕「${g['用途']||grpBorrower(g)}」的 ${ids.length} 項，原因（可留空）：`);
+  if(note===null) return;
+  doReview(ids,'reject',note);
+}
+function reviewSelected(idx,decision){
+  const ids=[...document.querySelectorAll('.chk_ad_'+idx+':checked')].map(b=>b.dataset.id);
+  if(!ids.length) return toast('沒有勾選任何項目','err');
+  if(decision==='reject'){const note=prompt(`拒絕勾選的 ${ids.length} 項，原因（可留空）：`); if(note===null) return; return doReview(ids,'reject',note);}
+  if(!confirm(`批准勾選的 ${ids.length} 項？`)) return;
+  doReview(ids,'approve');
 }
 async function markReturn(id){if(!confirm('確認此器材已歸還？'))return;const r=await api('return',{id,pin:ADMIN_PIN},true);r.ok?(toast('已登記歸還','ok'),load()):toast(r.error,'err');}
 
