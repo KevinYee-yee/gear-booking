@@ -105,6 +105,25 @@
   .citem .cn{flex:1;font-size:14px}
   .citem .rm{color:var(--red);cursor:pointer;border:none;background:none;font-size:16px}
 
+  /* 行事曆 */
+  .calnav{display:flex;align-items:center;gap:10px;margin:2px 0 12px;flex-wrap:wrap;font-size:13px;color:var(--sub)}
+  .callegend .lg{display:inline-block;width:14px;height:11px;border-radius:3px;vertical-align:middle;margin:0 3px}
+  .lg.appr{background:var(--accent)}.lg.pend{border:1px dashed var(--amber)}
+  .calwrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px}
+  .calgrid{min-width:max-content}
+  .calrow{display:flex;align-items:stretch;border-top:1px solid var(--line)}
+  .calheadrow{border-top:none;position:sticky;top:0;z-index:3}
+  .calname{position:sticky;left:0;z-index:2;background:var(--panel);display:flex;align-items:center;padding:0 10px;border-right:1px solid var(--line);font-size:13px;font-weight:600;flex:0 0 auto}
+  .calhcell{background:var(--panel2)}
+  .calday{flex:0 0 auto;text-align:center;font-size:11px;color:var(--sub);border-right:1px solid var(--line);padding:5px 0;display:flex;flex-direction:column;justify-content:center;background:var(--panel2)}
+  .calday.wend{color:#c98a8a}
+  .calday.tdy{background:#2a2412;color:var(--accent2)}
+  .caltrack{position:relative;flex:0 0 auto}
+  .cbar{position:absolute;height:20px;border-radius:5px;font-size:11px;color:#1a1400;display:flex;align-items:center;padding:0 6px;overflow:hidden;white-space:nowrap;cursor:default}
+  .cbar.appr{background:var(--accent)}
+  .cbar.pend{background:transparent;border:1px dashed var(--amber);color:var(--amber)}
+  .caltoday{position:absolute;top:0;bottom:0;background:rgba(201,168,106,.10);pointer-events:none}
+
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:12px 20px;border-radius:12px;z-index:100;opacity:0;transition:.3s;pointer-events:none;max-width:90%}
   .toast.on{opacity:1}.toast.err{border-color:var(--red)}.toast.ok{border-color:var(--green)}
   .loading{text-align:center;padding:60px;color:var(--sub)}
@@ -207,6 +226,8 @@ let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {i
 let editEquipId=null;
 
 const todayStr=()=>new Date().toISOString().slice(0,10);
+const addDays=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+let calStart=todayStr();
 
 async function api(action,params={},isPost=false){
   if(isPost){
@@ -286,13 +307,18 @@ function renderInventory(){
   });
   const units=buildUnits(items);
   const chips=cats.map(c=>`<div class="fchip ${c===filterCat?'on':''}" onclick="setCat('${c}')">${c}</div>`).join('');
-  const body=units.length?(viewMode==='card'?cardView(units):listView(units)):`<div class="empty">沒有符合的器材</div>`;
+  let body;
+  if(!items.length) body=`<div class="empty">沒有符合的器材</div>`;
+  else if(viewMode==='calendar') body=calendarView(items);
+  else if(viewMode==='list') body=listView(units);
+  else body=cardView(units);
   return `
     <div class="toolbar">
       <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 群組…" value="${searchQ}">
       <div class="vtoggle">
         <button class="${viewMode==='card'?'on':''}" onclick="setView('card')">▦ 卡片</button>
         <button class="${viewMode==='list'?'on':''}" onclick="setView('list')">☰ 列表</button>
+        <button class="${viewMode==='calendar'?'on':''}" onclick="setView('calendar')">📅 行事曆</button>
       </div>
     </div>
     <div class="pill-filter">${chips}</div>
@@ -345,6 +371,63 @@ function listView(units){
     }
   });
   return `<div class="lst">${rows}</div>`;
+}
+
+// ---- 行事曆（時間軸）----
+function shiftCal(n){calStart=addDays(calStart,n);render();}
+function calToday(){calStart=todayStr();render();}
+function calendarView(items){
+  const cellW=38, nameW=140, days=28;
+  const startD=new Date(calStart+'T00:00:00');
+  const idx=ds=>Math.round((new Date(ds+'T00:00:00')-startD)/86400000);
+  const today=todayStr();
+  const cols=[];
+  for(let i=0;i<days;i++){
+    const d=new Date(startD); d.setDate(d.getDate()+i);
+    const ds=d.toISOString().slice(0,10);
+    cols.push({ds,num:d.getDate(),wd:d.getDay(),first:d.getDate()===1||i===0,month:d.getMonth()+1});
+  }
+  let head=`<div class="calname calhcell" style="width:${nameW}px">器材</div>`;
+  cols.forEach(c=>{
+    const cls=(c.wd===0||c.wd===6?'wend ':'')+(c.ds===today?'tdy':'');
+    head+=`<div class="calday ${cls}" style="width:${cellW}px">${c.first?`<b>${c.month}月</b>`:'&nbsp;'}<span>${c.num}</span></div>`;
+  });
+
+  const ti=idx(today);
+  const trackBg=`background-image:linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:${cellW}px 100%`;
+  let rows='';
+  items.forEach(e=>{
+    const resv=DATA.reservations.filter(r=>r['器材id']===e.id && ['已核准','待審核'].includes(r['狀態']) && idx(r['歸還日'])>=0 && idx(r['借出日'])<=days-1);
+    resv.sort((a,b)=>a['借出日']<b['借出日']?-1:1);
+    const lanes=[];
+    const placed=resv.map(r=>{
+      const s=Math.max(0,idx(r['借出日'])), en=Math.min(days-1,idx(r['歸還日']));
+      let lane=lanes.findIndex(le=>le<s);
+      if(lane<0){lane=lanes.length;lanes.push(en);} else lanes[lane]=en;
+      return {r,s,en,lane};
+    });
+    const rowH=Math.max(1,lanes.length)*24+8;
+    let bars=(ti>=0&&ti<days)?`<div class="caltoday" style="left:${ti*cellW}px;width:${cellW}px"></div>`:'';
+    placed.forEach(p=>{
+      const ap=p.r['狀態']==='已核准';
+      bars+=`<div class="cbar ${ap?'appr':'pend'}" style="left:${p.s*cellW+2}px;top:${p.lane*24+4}px;width:${(p.en-p.s+1)*cellW-4}px" title="${p.r['借用人']}／${p.r['部門']}　${p.r['借出日']}~${p.r['歸還日']}　×${Number(p.r['數量'])||1}　${p.r['狀態']}">${p.r['借用人']||''}${(Number(p.r['數量'])||1)>1?' ×'+p.r['數量']:''}</div>`;
+    });
+    rows+=`<div class="calrow" style="height:${rowH}px">
+      <div class="calname" style="width:${nameW}px">${e['名稱']}</div>
+      <div class="caltrack" style="width:${days*cellW}px;${trackBg}">${bars}</div>
+    </div>`;
+  });
+
+  return `<div class="calnav">
+      <button class="btn sm" onclick="shiftCal(-14)">‹ 前兩週</button>
+      <button class="btn sm" onclick="calToday()">回今天</button>
+      <button class="btn sm" onclick="shiftCal(14)">後兩週 ›</button>
+      <span>${cols[0].ds} ~ ${cols[days-1].ds}</span>
+      <span class="callegend"><i class="lg appr"></i>已核准　<i class="lg pend"></i>待審核</span>
+    </div>
+    <div class="calwrap"><div class="calgrid">
+      <div class="calrow calheadrow">${head}</div>${rows||'<div class="empty">沒有器材</div>'}
+    </div></div>`;
 }
 
 function renderMyResv(){
