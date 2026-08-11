@@ -168,11 +168,13 @@
     <h2 id="emTitle">新增器材</h2>
     <div class="field"><label>名稱 *</label><input id="emName"></div>
     <div class="row2">
-      <div class="field"><label>分類</label><input id="emCat" placeholder="相機 / 鏡頭 / 燈光…"></div>
+      <div class="field"><label>分類（選擇或輸入新的）</label>
+        <input id="emCat" list="catList" placeholder="選擇或輸入新分類"><datalist id="catList"></datalist></div>
       <div class="field"><label>型號</label><input id="emModel"></div>
     </div>
     <div class="row2">
-      <div class="field"><label>群組（同群組會收合，例：記憶卡）</label><input id="emGroup" placeholder="留空＝獨立"></div>
+      <div class="field"><label>群組（選填，同群組會收合，例：記憶卡）</label>
+        <input id="emGroup" list="grpList" placeholder="留空＝獨立"><datalist id="grpList"></datalist></div>
       <div class="field"><label>庫存數量</label><input type="number" id="emQty" min="1" value="1"></div>
     </div>
     <div class="row2">
@@ -458,6 +460,10 @@ async function markReturn(id){if(!confirm('確認此器材已歸還？'))return;
 function openEquip(id){
   editEquipId=id;
   const e=id?DATA.equipment.find(x=>x.id===id):{};
+  // 填入既有分類/群組供下拉選單，也可直接輸入新的
+  const uniq=k=>[...new Set(DATA.equipment.map(x=>x[k]).filter(Boolean))].sort();
+  document.getElementById('catList').innerHTML=uniq('分類').map(c=>`<option value="${c}">`).join('');
+  document.getElementById('grpList').innerHTML=uniq('群組').map(g=>`<option value="${g}">`).join('');
   document.getElementById('emTitle').textContent=id?'編輯器材':'新增器材';
   const g=(k,v)=>document.getElementById(k).value=e[v]||'';
   g('emName','名稱');g('emCat','分類');g('emModel','型號');g('emSerial','序號');g('emPhoto','照片網址');g('emNote','備註');g('emGroup','群組');
