@@ -1,0 +1,477 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>攝影器材管理與預約</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e8eaed; --sub:#9aa2b1; --accent:#c9a86a; --accent2:#e8c987;
+    --green:#4caf7f; --red:#e5674f; --amber:#e0a83a; --blue:#5b8def;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"PingFang TC","Noto Sans TC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 16px 80px}
+  header{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.86);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  .hd{max-width:1080px;margin:0 auto;padding:14px 16px;display:flex;align-items:center;gap:12px}
+  .logo{font-weight:700;font-size:18px;letter-spacing:.3px}
+  .logo b{color:var(--accent)}
+  .spacer{flex:1}
+  .tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:4px}
+  .tab{padding:7px 14px;border-radius:999px;font-size:14px;color:var(--sub);
+    cursor:pointer;border:none;background:none;font-family:inherit}
+  .tab.on{background:var(--accent);color:#1a1400;font-weight:600}
+  .btn{border:1px solid var(--line);background:var(--panel2);color:var(--txt);
+    padding:9px 15px;border-radius:10px;cursor:pointer;font-size:14px;font-family:inherit;
+    transition:.15s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.pri{background:var(--accent);color:#1a1400;border-color:var(--accent);font-weight:600}
+  .btn.pri:hover{background:var(--accent2)}
+  .btn.sm{padding:6px 11px;font-size:13px}
+  .btn.gd{color:var(--green);border-color:#2e4a3d}
+  .btn.rd{color:var(--red);border-color:#4a2e2e}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:20px 0}
+  input,select,textarea{background:var(--panel);border:1px solid var(--line);color:var(--txt);
+    padding:10px 12px;border-radius:10px;font-size:14px;font-family:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  .search{flex:1;min-width:180px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;display:flex;flex-direction:column;gap:8px}
+  .card .thumb{height:120px;border-radius:10px;background:var(--panel2) center/cover;
+    display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:32px}
+  .card h3{margin:2px 0;font-size:16px}
+  .meta{font-size:13px;color:var(--sub);line-height:1.5}
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;
+    padding:3px 9px;border-radius:999px}
+  .b-ok{background:#16351f;color:#6ee7a0}
+  .b-out{background:#3a2a12;color:#e0a83a}
+  .b-fix{background:#2a2f3a;color:#9aa2b1}
+  .b-dead{background:#3a1f1f;color:#e5674f}
+  .b-wait{background:#22304a;color:#8ab4ff}
+  .b-appr{background:#16351f;color:#6ee7a0}
+  .b-rej{background:#3a1f1f;color:#e5674f}
+  .b-ret{background:#2a2f3a;color:#9aa2b1}
+  .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+  .rowlist{display:flex;flex-direction:column;gap:10px}
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .item .grow{flex:1;min-width:180px}
+  .item .t{font-weight:600}
+  .empty{text-align:center;color:var(--sub);padding:60px 0}
+  .sec-title{font-size:15px;color:var(--sub);margin:26px 0 12px;font-weight:600;
+    letter-spacing:.4px;text-transform:uppercase}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:16px}
+  .overlay.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    width:100%;max-width:460px;max-height:90vh;overflow:auto;padding:22px}
+  .modal h2{margin:0 0 4px;font-size:19px}
+  .modal .sub{color:var(--sub);font-size:13px;margin-bottom:16px}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:5px}
+  .field input,.field select,.field textarea{width:100%}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .modal .actions{display:flex;gap:10px;margin-top:18px}
+  .modal .actions .btn{flex:1;justify-content:center;text-align:center}
+  .slots{background:var(--panel2);border-radius:10px;padding:10px 12px;font-size:13px;
+    color:var(--sub);max-height:120px;overflow:auto}
+  .slots div{padding:2px 0}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    background:var(--panel2);border:1px solid var(--line);padding:12px 20px;border-radius:12px;
+    z-index:100;opacity:0;transition:.3s;pointer-events:none;max-width:90%}
+  .toast.on{opacity:1}
+  .toast.err{border-color:var(--red)}
+  .toast.ok{border-color:var(--green)}
+  .loading{text-align:center;padding:60px;color:var(--sub)}
+  .hide{display:none!important}
+  .pill-filter{display:flex;gap:6px;flex-wrap:wrap}
+  .fchip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);
+    background:var(--panel);color:var(--sub);cursor:pointer;font-size:13px}
+  .fchip.on{border-color:var(--accent);color:var(--accent)}
+  .count{background:var(--red);color:#fff;font-size:11px;font-weight:700;
+    border-radius:999px;padding:1px 7px;margin-left:4px}
+</style>
+
+<header>
+  <div class="hd">
+    <div class="logo">📷 器材<b>管理</b></div>
+    <div class="spacer"></div>
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-view="inventory">器材庫存</button>
+      <button class="tab" data-view="myresv">預約查詢</button>
+      <button class="tab" data-view="admin">管理端</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="app"><div class="loading">載入中…</div></div>
+</div>
+
+<!-- 預約申請 modal -->
+<div class="overlay" id="resvModal">
+  <div class="modal">
+    <h2 id="rmTitle">預約器材</h2>
+    <div class="sub" id="rmSub"></div>
+    <div class="field"><label>目前已核准的借用時段（避開這些）</label>
+      <div class="slots" id="rmSlots">尚無核准中的借用</div></div>
+    <div class="row2">
+      <div class="field"><label>借出日 *</label><input type="date" id="rmStart"></div>
+      <div class="field"><label>歸還日 *</label><input type="date" id="rmEnd"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>借用人 *</label><input id="rmName" placeholder="姓名"></div>
+      <div class="field"><label>部門 *</label><input id="rmDept" placeholder="所屬部門"></div>
+    </div>
+    <div class="field"><label>聯絡方式</label><input id="rmContact" placeholder="分機 / Email / 手機"></div>
+    <div class="field"><label>用途</label><textarea id="rmPurpose" rows="2" placeholder="拍攝專案、地點…"></textarea></div>
+    <div class="actions">
+      <button class="btn" onclick="closeModal('resvModal')">取消</button>
+      <button class="btn pri" id="rmSubmit">送出申請</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN modal -->
+<div class="overlay" id="pinModal">
+  <div class="modal" style="max-width:340px">
+    <h2>管理端登入</h2>
+    <div class="sub">輸入管理員 PIN 以審核與管理器材</div>
+    <div class="field"><input type="password" id="pinInput" placeholder="PIN" style="width:100%"></div>
+    <div class="actions">
+      <button class="btn" onclick="closeModal('pinModal')">取消</button>
+      <button class="btn pri" id="pinSubmit">進入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 器材編輯 modal（管理端）-->
+<div class="overlay" id="equipModal">
+  <div class="modal">
+    <h2 id="emTitle">新增器材</h2>
+    <div class="field"><label>名稱 *</label><input id="emName"></div>
+    <div class="row2">
+      <div class="field"><label>分類</label><input id="emCat" placeholder="相機 / 鏡頭 / 燈光…"></div>
+      <div class="field"><label>型號</label><input id="emModel"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>序號</label><input id="emSerial"></div>
+      <div class="field"><label>狀態</label>
+        <select id="emStatus"><option>可借用</option><option>維修中</option><option>報廢</option></select></div>
+    </div>
+    <div class="field"><label>照片網址</label><input id="emPhoto" placeholder="https://…"></div>
+    <div class="field"><label>備註</label><input id="emNote"></div>
+    <div class="actions">
+      <button class="btn rd" id="emDelete" style="flex:0 0 auto">刪除</button>
+      <button class="btn" onclick="closeModal('equipModal')">取消</button>
+      <button class="btn pri" id="emSave">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ====== 設定：GAS Web App 網址（已寫死，同事開啟即用）======
+const API_URL = localStorage.getItem('gear_api') ||
+  'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
+
+let DATA = { equipment: [], reservations: [] };
+let VIEW = 'inventory';
+let ADMIN_PIN = sessionStorage.getItem('gear_pin') || '';
+let filterCat = '全部', searchQ = '';
+let editEquipId = null, resvEquipId = null;
+
+const todayStr = () => new Date().toISOString().slice(0,10);
+
+// ---- API ----
+async function api(action, params={}, isPost=false){
+  if(!API_URL) throw new Error('尚未設定 API_URL（見 README）');
+  if(isPost){
+    const res = await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action, ...params})
+    });
+    return res.json();
+  } else {
+    const q = new URLSearchParams({action, ...params});
+    const res = await fetch(API_URL + '?' + q.toString());
+    return res.json();
+  }
+}
+
+async function load(){
+  try{
+    const r = await api('list');
+    if(!r.ok) throw new Error(r.error||'讀取失敗');
+    DATA = r;
+    render();
+  }catch(e){
+    document.getElementById('app').innerHTML =
+      `<div class="empty">⚠️ ${e.message}<br><br>
+       <button class="btn" onclick="setApi()">設定 API 網址</button></div>`;
+  }
+}
+
+function setApi(){
+  const url = prompt('貼上 GAS Web App 網址（/exec 結尾）：', API_URL);
+  if(url){ localStorage.setItem('gear_api', url.trim()); location.reload(); }
+}
+
+// ---- 狀態計算 ----
+function liveStatus(eq){
+  if(eq['狀態']!=='可借用') return eq['狀態'];
+  const t = todayStr();
+  const out = DATA.reservations.find(r=> r['器材id']===eq.id
+    && r['狀態']==='已核准' && r['借出日']<=t && r['歸還日']>=t);
+  return out ? '借出中' : '可借用';
+}
+function badge(status){
+  const map = {'可借用':'b-ok','借出中':'b-out','維修中':'b-fix','報廢':'b-dead',
+    '待審核':'b-wait','已核准':'b-appr','已拒絕':'b-rej','已歸還':'b-ret','已取消':'b-ret'};
+  return `<span class="badge ${map[status]||'b-fix'}"><span class="dot"></span>${status}</span>`;
+}
+
+// ---- 渲染 ----
+function render(){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t.dataset.view===VIEW));
+  const app = document.getElementById('app');
+  if(VIEW==='inventory') app.innerHTML = renderInventory();
+  else if(VIEW==='myresv') app.innerHTML = renderMyResv();
+  else if(VIEW==='admin') app.innerHTML = renderAdmin();
+  bind();
+}
+
+function renderInventory(){
+  const cats = ['全部', ...new Set(DATA.equipment.map(e=>e['分類']).filter(Boolean))];
+  let list = DATA.equipment.filter(e=>{
+    const okCat = filterCat==='全部' || e['分類']===filterCat;
+    const q = searchQ.toLowerCase();
+    const okQ = !q || (e['名稱']+e['型號']+e['分類']+e['序號']).toLowerCase().includes(q);
+    return okCat && okQ;
+  });
+  const chips = cats.map(c=>`<div class="fchip ${c===filterCat?'on':''}" onclick="setCat('${c}')">${c}</div>`).join('');
+  const cards = list.map(e=>{
+    const st = liveStatus(e);
+    const canBook = st!=='報廢' && st!=='維修中';
+    const thumb = e['照片網址']
+      ? `<div class="thumb" style="background-image:url('${e['照片網址']}')"></div>`
+      : `<div class="thumb">📷</div>`;
+    return `<div class="card">
+      ${thumb}
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+        <h3>${e['名稱']}</h3>${badge(st)}
+      </div>
+      <div class="meta">${[e['分類'],e['型號']].filter(Boolean).join(' · ')||'—'}
+        ${e['序號']?`<br>序號 ${e['序號']}`:''}
+        ${e['備註']?`<br>${e['備註']}`:''}</div>
+      <div style="flex:1"></div>
+      <button class="btn pri sm ${canBook?'':'hide'}" onclick="openResv('${e.id}')">預約借用</button>
+    </div>`;
+  }).join('');
+  return `
+    <div class="toolbar">
+      <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 序號…" value="${searchQ}">
+    </div>
+    <div class="pill-filter" style="margin-bottom:18px">${chips}</div>
+    ${list.length? `<div class="grid">${cards}</div>` : `<div class="empty">沒有符合的器材</div>`}`;
+}
+
+function renderMyResv(){
+  const rs = [...DATA.reservations].reverse();
+  if(!rs.length) return `<div class="empty">目前沒有任何預約紀錄</div>`;
+  const items = rs.map(r=>`
+    <div class="item">
+      <div class="grow">
+        <div class="t">${r['器材名稱']} ${badge(r['狀態'])}</div>
+        <div class="meta">${r['借用人']} · ${r['部門']} ｜ ${r['借出日']} → ${r['歸還日']}
+          ${r['用途']?`<br>用途：${r['用途']}`:''}
+          ${r['審核備註']?`<br>審核備註：${r['審核備註']}`:''}</div>
+      </div>
+      ${['待審核','已核准'].includes(r['狀態'])
+        ? `<button class="btn sm rd" onclick="cancelResv('${r.id}')">取消申請</button>`:''}
+    </div>`).join('');
+  return `<div class="sec-title">全部預約 / 借用紀錄</div><div class="rowlist">${items}</div>`;
+}
+
+function renderAdmin(){
+  if(!ADMIN_PIN) return `<div class="empty">需要管理員權限<br><br>
+    <button class="btn pri" onclick="openModal('pinModal')">管理端登入</button></div>`;
+  const t = todayStr();
+  const pending = DATA.reservations.filter(r=>r['狀態']==='待審核');
+  const active  = DATA.reservations.filter(r=>r['狀態']==='已核准');
+  const overdue = active.filter(r=>r['歸還日']<t);
+
+  const pendingHtml = pending.length? pending.map(r=>`
+    <div class="item">
+      <div class="grow"><div class="t">${r['器材名稱']}</div>
+        <div class="meta">${r['借用人']} · ${r['部門']} ｜ ${r['借出日']} → ${r['歸還日']}
+          ${r['聯絡方式']?`｜ ${r['聯絡方式']}`:''}${r['用途']?`<br>用途：${r['用途']}`:''}
+          ${r['申請人Email']?`<br>🔒 登入身分：${r['申請人Email']}`:''}</div></div>
+      <button class="btn sm gd" onclick="review('${r.id}','approve')">核准</button>
+      <button class="btn sm rd" onclick="review('${r.id}','reject')">拒絕</button>
+    </div>`).join('') : `<div class="empty">沒有待審核申請</div>`;
+
+  const activeHtml = active.length? active.map(r=>{
+    const od = r['歸還日']<t;
+    return `<div class="item">
+      <div class="grow"><div class="t">${r['器材名稱']} ${od?'<span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
+        <div class="meta">${r['借用人']} · ${r['部門']} ｜ ${r['借出日']} → ${r['歸還日']}</div></div>
+      <button class="btn sm" onclick="markReturn('${r.id}')">登記歸還</button>
+    </div>`;}).join('') : `<div class="empty">目前沒有借出中的器材</div>`;
+
+  const equipHtml = DATA.equipment.map(e=>`
+    <div class="item">
+      <div class="grow"><div class="t">${e['名稱']} ${badge(liveStatus(e))}</div>
+        <div class="meta">${[e['分類'],e['型號'],e['序號']].filter(Boolean).join(' · ')||'—'}</div></div>
+      <button class="btn sm" onclick="openEquip('${e.id}')">編輯</button>
+    </div>`).join('');
+
+  return `
+    <div class="sec-title">待審核申請 ${pending.length?`<span class="count">${pending.length}</span>`:''}</div>
+    <div class="rowlist">${pendingHtml}</div>
+    <div class="sec-title">借出中 ${overdue.length?`<span class="count">${overdue.length} 逾期</span>`:''}</div>
+    <div class="rowlist">${activeHtml}</div>
+    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center">
+      <span>器材清單（${DATA.equipment.length}）</span>
+      <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button></div>
+    <div class="rowlist">${equipHtml}</div>`;
+}
+
+// ---- 事件綁定 ----
+function bind(){
+  const s = document.getElementById('searchBox');
+  if(s) s.oninput = e=>{
+    searchQ = e.target.value;
+    const pos = e.target.selectionStart;
+    render();
+    const ns = document.getElementById('searchBox');
+    if(ns){ ns.focus(); ns.setSelectionRange(pos,pos); }
+  };
+}
+function setCat(c){ filterCat=c; render(); }
+
+// ---- 預約 ----
+function openResv(id){
+  resvEquipId = id;
+  const eq = DATA.equipment.find(e=>e.id===id);
+  document.getElementById('rmTitle').textContent = '預約：'+eq['名稱'];
+  document.getElementById('rmSub').textContent = [eq['分類'],eq['型號'],eq['序號']].filter(Boolean).join(' · ');
+  const slots = DATA.reservations.filter(r=>r['器材id']===id && r['狀態']==='已核准');
+  document.getElementById('rmSlots').innerHTML = slots.length
+    ? slots.map(s=>`<div>🔒 ${s['借出日']} → ${s['歸還日']}（${s['部門']}）</div>`).join('')
+    : '尚無核准中的借用，時段開放';
+  ['rmStart','rmEnd','rmName','rmDept','rmContact','rmPurpose'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('rmStart').value = todayStr();
+  openModal('resvModal');
+}
+
+document.getElementById('rmSubmit').onclick = async ()=>{
+  const p = {
+    器材id: resvEquipId,
+    借出日: document.getElementById('rmStart').value,
+    歸還日: document.getElementById('rmEnd').value,
+    借用人: document.getElementById('rmName').value.trim(),
+    部門: document.getElementById('rmDept').value.trim(),
+    聯絡方式: document.getElementById('rmContact').value.trim(),
+    用途: document.getElementById('rmPurpose').value.trim(),
+  };
+  if(!p.借出日||!p.歸還日||!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
+  toast('送出中…');
+  const r = await api('create_reservation', p, true);
+  if(r.ok){ closeModal('resvModal'); toast('申請已送出，等待審核','ok'); load(); }
+  else toast(r.error||'送出失敗','err');
+};
+
+async function cancelResv(id){
+  if(!confirm('確定要取消這筆申請？')) return;
+  const r = await api('cancel_reservation',{id},true);
+  if(r.ok){ toast('已取消','ok'); load(); } else toast(r.error,'err');
+}
+
+// ---- 管理端 ----
+document.getElementById('pinSubmit').onclick = ()=>{
+  const pin = document.getElementById('pinInput').value.trim();
+  if(!pin) return;
+  ADMIN_PIN = pin; sessionStorage.setItem('gear_pin', pin);
+  closeModal('pinModal'); render();
+};
+async function review(id, decision){
+  const note = decision==='reject' ? (prompt('拒絕原因（可留空）：')||'') : '';
+  const r = await api('review',{id, decision, pin:ADMIN_PIN, 審核備註:note}, true);
+  if(r.ok){ toast(decision==='approve'?'已核准':'已拒絕','ok'); load(); }
+  else toast(r.error,'err');
+}
+async function markReturn(id){
+  if(!confirm('確認此器材已歸還？')) return;
+  const r = await api('return',{id, pin:ADMIN_PIN}, true);
+  if(r.ok){ toast('已登記歸還','ok'); load(); } else toast(r.error,'err');
+}
+
+function openEquip(id){
+  editEquipId = id;
+  const e = id ? DATA.equipment.find(x=>x.id===id) : {};
+  document.getElementById('emTitle').textContent = id?'編輯器材':'新增器材';
+  document.getElementById('emName').value = e['名稱']||'';
+  document.getElementById('emCat').value = e['分類']||'';
+  document.getElementById('emModel').value = e['型號']||'';
+  document.getElementById('emSerial').value = e['序號']||'';
+  document.getElementById('emStatus').value = e['狀態']||'可借用';
+  document.getElementById('emPhoto').value = e['照片網址']||'';
+  document.getElementById('emNote').value = e['備註']||'';
+  document.getElementById('emDelete').style.display = id?'block':'none';
+  openModal('equipModal');
+}
+document.getElementById('emSave').onclick = async ()=>{
+  const p = {
+    pin: ADMIN_PIN,
+    名稱: document.getElementById('emName').value.trim(),
+    分類: document.getElementById('emCat').value.trim(),
+    型號: document.getElementById('emModel').value.trim(),
+    序號: document.getElementById('emSerial').value.trim(),
+    狀態: document.getElementById('emStatus').value,
+    照片網址: document.getElementById('emPhoto').value.trim(),
+    備註: document.getElementById('emNote').value.trim(),
+  };
+  if(!p.名稱) return toast('請填寫名稱','err');
+  const r = editEquipId
+    ? await api('update_equipment',{id:editEquipId,...p},true)
+    : await api('add_equipment',p,true);
+  if(r.ok){ closeModal('equipModal'); toast('已儲存','ok'); load(); } else toast(r.error,'err');
+};
+document.getElementById('emDelete').onclick = async ()=>{
+  if(!confirm('確定刪除此器材？此動作無法復原。')) return;
+  const r = await api('delete_equipment',{id:editEquipId,pin:ADMIN_PIN},true);
+  if(r.ok){ closeModal('equipModal'); toast('已刪除','ok'); load(); } else toast(r.error,'err');
+};
+
+// ---- 共用 UI ----
+function openModal(id){ document.getElementById(id).classList.add('on'); }
+function closeModal(id){ document.getElementById(id).classList.remove('on'); }
+let toastT;
+function toast(msg, type=''){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'toast on '+type;
+  clearTimeout(toastT); toastT = setTimeout(()=>el.className='toast',2600);
+}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
+  if(e.target===o) o.classList.remove('on');
+}));
+document.getElementById('tabs').addEventListener('click',e=>{
+  if(e.target.dataset.view){ VIEW=e.target.dataset.view; render(); }
+});
+
+load();
+</script>
