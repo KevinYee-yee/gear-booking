@@ -70,7 +70,7 @@ function apiCreateReservation(p) {
   var res = tryReserveOne(p['器材id'], p['借出日'], p['歸還日'], qty, null);
   if (!res.ok) return res;
 
-  var id = writeReservation(res.equip, p, qty);
+  var id = writeReservation(res.equip, p, qty, 'B' + new Date().getTime());
   notifyAdminNew([{ 名稱: res.equip['名稱'], 數量: qty }], p);
   return { ok: true, id: id };
 }
@@ -91,10 +91,11 @@ function apiCreateReservations(p) {
     if (!res.ok) return { ok: false, error: res.error };
     checked.push({ equip: res.equip, qty: qty });
   }
-  // 通過才一次建立
+  // 通過才一次建立（同一次申請共用一個批次碼）
+  var batch = 'B' + new Date().getTime();
   var ids = [];
   for (var j = 0; j < checked.length; j++) {
-    ids.push(writeReservation(checked[j].equip, p, checked[j].qty));
+    ids.push(writeReservation(checked[j].equip, p, checked[j].qty, batch));
   }
   notifyAdminNew(checked.map(function (c) { return { 名稱: c.equip['名稱'], 數量: c.qty }; }), p);
   return { ok: true, ids: ids, count: ids.length };
@@ -115,13 +116,13 @@ function tryReserveOne(equipId, start, end, qty, excludeId) {
   return { ok: true, equip: equip.data };
 }
 
-function writeReservation(equipData, p, qty) {
+function writeReservation(equipData, p, qty, batch) {
   var sh = sheet(SHEET_RESV);
   var id = 'R' + new Date().getTime() + Math.floor(Math.random() * 1000);
   sh.appendRow([
     id, equipData['id'], equipData['名稱'], p['借用人'], p['部門'],
     p['聯絡方式'] || '', p['借出日'], p['歸還日'], p['用途'] || '',
-    '待審核', new Date(), '', qty
+    '待審核', new Date(), '', qty, batch || ''
   ]);
   return id;
 }
@@ -340,8 +341,19 @@ function setupSheets() {
 
   var rv = ss.getSheetByName(SHEET_RESV) || ss.insertSheet(SHEET_RESV);
   rv.clear();
-  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註','數量']);
+  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註','數量','批次']);
   rv.setFrozenRows(1);
+}
+
+/**
+ * 非破壞性升級：只在「預約」表補上缺少的「批次」欄，不刪任何資料、不動器材表。
+ * 已經有資料、不想重跑 setupSheets 時用這個。
+ */
+function upgradeSchema() {
+  var sh = sheet(SHEET_RESV);
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  if (headers.indexOf('批次') < 0) sh.getRange(1, sh.getLastColumn() + 1).setValue('批次');
+  Logger.log('預約表欄位：' + sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].join(','));
 }
 
 /**
