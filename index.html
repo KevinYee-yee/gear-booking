@@ -509,6 +509,10 @@ function updateCart(){
 function openCart(){
   if(!Object.keys(cart).length) return toast('清單是空的','err');
   document.getElementById('ckStart').value=document.getElementById('ckStart').value||todayStr();
+  // 自動帶入本機記住的上次借用資料
+  const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
+  const pf=(id,v)=>{const el=document.getElementById(id); if(v&&!el.value) el.value=v;};
+  pf('ckName',me.name); pf('ckDept',me.dept); pf('ckMail',me.mail);
   renderCart(); openModal('cartModal');
 }
 function renderCart(){
@@ -541,7 +545,10 @@ document.getElementById('ckSubmit').onclick=async()=>{
   if(!p.聯絡方式||p.聯絡方式.indexOf('@')<0) return toast('請填寫有效 Email','err');
   toast('送出中…');
   const r=await api('create_reservations',p,true);
-  if(r.ok){ cart={}; saveCart(); closeModal('cartModal'); toast(`已送出 ${r.count} 項申請，等待審核`,'ok'); load(); }
+  if(r.ok){
+    localStorage.setItem('gear_borrower',JSON.stringify({name:p.借用人,dept:p.部門,mail:p.聯絡方式}));
+    cart={}; saveCart(); closeModal('cartModal'); toast(`已送出 ${r.count} 項申請，等待審核`,'ok'); load();
+  }
   else toast(r.error||'送出失敗','err');
 };
 
