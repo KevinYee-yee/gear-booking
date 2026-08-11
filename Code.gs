@@ -81,7 +81,7 @@ function apiCreateReservations(p) {
   var items = p['items'];
   if (typeof items === 'string') { try { items = JSON.parse(items); } catch (e) {} }
   if (!items || !items.length) return { ok: false, error: '清單是空的' };
-  if (p['借出日'] > p['歸還日']) return { ok: false, error: '歸還日不可早於借出日' };
+  if (p['借出日'] >= p['歸還日']) return { ok: false, error: '歸還時間需晚於借出時間' };
 
   // 先全部驗證，任何一項不足就整批擋下，不建立半套
   var checked = [];
@@ -107,7 +107,7 @@ function tryReserveOne(equipId, start, end, qty, excludeId) {
   if (equip.data['狀態'] !== '可借用') {
     return { ok: false, error: equip.data['名稱'] + '：目前狀態為「' + equip.data['狀態'] + '」，無法預約' };
   }
-  if (start > end) return { ok: false, error: '歸還日不可早於借出日' };
+  if (start >= end) return { ok: false, error: '歸還時間需晚於借出時間' };
   var a = availability(equipId, start, end, excludeId);
   if (qty > a.free) {
     return { ok: false, error: equip.data['名稱'] + '：該時段僅剩 ' + a.free + ' 份（庫存 ' + a.stock + '），無法借 ' + qty + ' 份' };
@@ -230,7 +230,8 @@ function availability(equipId, start, end, excludeId) {
     if (x['器材id'] !== equipId) continue;
     if (excludeId && x['id'] === excludeId) continue;
     if (x['狀態'] !== '已核准') continue;
-    if (start <= x['歸還日'] && end >= x['借出日']) used += (Number(x['數量']) || 1);
+    // 接頭不算撞（A 12:00 還、B 12:00 借 → 不重疊）
+    if (start < x['歸還日'] && end > x['借出日']) used += (Number(x['數量']) || 1);
   }
   return { stock: stock, used: used, free: Math.max(0, stock - used) };
 }
@@ -283,7 +284,7 @@ function readSheet(name) {
     for (var j = 0; j < headers.length; j++) {
       var v = values[i][j];
       if (v instanceof Date && (headers[j] === '借出日' || headers[j] === '歸還日')) {
-        v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
       } else if (v instanceof Date) {
         v = Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
       }

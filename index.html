@@ -153,8 +153,8 @@
     <div class="sub">選好器材與數量，最後填一次借用資料送出</div>
     <div id="cartItems"></div>
     <div class="row2" style="margin-top:16px">
-      <div class="field"><label>借出日 *</label><input type="date" id="ckStart"></div>
-      <div class="field"><label>歸還日 *</label><input type="date" id="ckEnd"></div>
+      <div class="field"><label>借出時間 *</label><input type="datetime-local" id="ckStart"></div>
+      <div class="field"><label>歸還時間 *</label><input type="datetime-local" id="ckEnd"></div>
     </div>
     <div class="row2">
       <div class="field"><label>借用人 *</label><input id="ckName" placeholder="姓名"></div>
@@ -226,6 +226,8 @@ let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {i
 let editEquipId=null;
 
 const todayStr=()=>new Date().toISOString().slice(0,10);
+const pad2=n=>String(n).padStart(2,'0');
+const nowStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());};
 const addDays=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
 let calStart=todayStr();
 
@@ -249,23 +251,21 @@ async function load(){
   }
 }
 
-// ---- 可借量（依日期）----
-function freeCount(id,start,end){
-  const eq=DATA.equipment.find(e=>e.id===id);
-  const stock=eq?(Number(eq['數量'])||1):1;
-  let used=0;
+// ---- 目前（此刻）已借出的份數 ----
+function usedNow(id){
+  const now=nowStr(); let u=0;
   DATA.reservations.forEach(r=>{
-    if(r['器材id']===id && r['狀態']==='已核准' && start<=r['歸還日'] && end>=r['借出日'])
-      used+=(Number(r['數量'])||1);
+    if(r['器材id']===id && r['狀態']==='已核准' && String(r['借出日'])<=now && now<=String(r['歸還日']))
+      u+=(Number(r['數量'])||1);
   });
-  return Math.max(0,stock-used);
+  return u;
 }
 function liveBadge(eq){
   if(eq['狀態']!=='可借用') return badge(eq['狀態']);
   const stock=Number(eq['數量'])||1;
-  const free=freeCount(eq.id,todayStr(),todayStr());
+  const free=Math.max(0,stock-usedNow(eq.id));
   if(stock===1) return free>0?badge('可借用'):badge('借出中');
-  return `<span class="badge ${free>0?'b-ok':'b-out'}"><span class="dot"></span>今日可借 ${free}/${stock}</span>`;
+  return `<span class="badge ${free>0?'b-ok':'b-out'}"><span class="dot"></span>現可借 ${free}/${stock}</span>`;
 }
 function badge(s){
   const m={'可借用':'b-ok','借出中':'b-out','維修中':'b-fix','報廢':'b-dead','待審核':'b-wait','已核准':'b-appr','已拒絕':'b-rej','已歸還':'b-ret','已取消':'b-ret'};
@@ -379,7 +379,7 @@ function calToday(){calStart=todayStr();render();}
 function calendarView(items){
   const cellW=38, nameW=140, days=28;
   const startD=new Date(calStart+'T00:00:00');
-  const idx=ds=>Math.round((new Date(ds+'T00:00:00')-startD)/86400000);
+  const idx=ds=>Math.round((new Date(String(ds).slice(0,10)+'T00:00:00')-startD)/86400000);
   const today=todayStr();
   const cols=[];
   for(let i=0;i<days;i++){
@@ -508,7 +508,7 @@ function updateCart(){
 }
 function openCart(){
   if(!Object.keys(cart).length) return toast('清單是空的','err');
-  document.getElementById('ckStart').value=document.getElementById('ckStart').value||todayStr();
+  document.getElementById('ckStart').value=document.getElementById('ckStart').value||(todayStr()+'T09:00');
   // 自動帶入本機記住的上次借用資料
   const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
   const pf=(id,v)=>{const el=document.getElementById(id); if(v&&!el.value) el.value=v;};
@@ -532,16 +532,18 @@ function renderCart(){
 document.getElementById('ckSubmit').onclick=async()=>{
   const items=Object.values(cart).map(c=>({器材id:c.id,數量:c.數量}));
   if(!items.length) return toast('清單是空的','err');
+  const s=document.getElementById('ckStart').value, e2=document.getElementById('ckEnd').value;
   const p={
     items,
-    借出日:document.getElementById('ckStart').value,
-    歸還日:document.getElementById('ckEnd').value,
+    借出日:s.replace('T',' '),
+    歸還日:e2.replace('T',' '),
     借用人:document.getElementById('ckName').value.trim(),
     部門:document.getElementById('ckDept').value.trim(),
     聯絡方式:document.getElementById('ckMail').value.trim(),
     用途:document.getElementById('ckPurpose').value.trim(),
   };
-  if(!p.借出日||!p.歸還日||!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
+  if(!s||!e2||!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
+  if(p.歸還日<=p.借出日) return toast('歸還時間需晚於借出時間','err');
   if(!p.聯絡方式||p.聯絡方式.indexOf('@')<0) return toast('請填寫有效 Email','err');
   toast('送出中…');
   const r=await api('create_reservations',p,true);
