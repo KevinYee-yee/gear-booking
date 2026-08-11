@@ -203,7 +203,7 @@ let ADMIN_PIN=sessionStorage.getItem('gear_pin')||'';
 let filterCat='全部', searchQ='';
 let viewMode=localStorage.getItem('gear_viewmode')||'card';
 let expanded={};           // 群組展開狀態
-let cart={};               // 器材id -> {id,名稱,數量,stock}
+let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
 const todayStr=()=>new Date().toISOString().slice(0,10);
@@ -222,7 +222,7 @@ async function load(){
   try{
     const r=await api('list');
     if(!r.ok) throw new Error(r.error||'讀取失敗');
-    DATA=r; render();
+    DATA=r; reconcileCart(); render();
   }catch(e){
     document.getElementById('app').innerHTML=`<div class="empty">⚠️ ${e.message}</div>`;
   }
@@ -388,22 +388,34 @@ function setView(v){viewMode=v;localStorage.setItem('gear_viewmode',v);render();
 function toggleGroup(n){expanded[n]=!expanded[n];render();}
 
 // ---- 購物車 ----
+function saveCart(){localStorage.setItem('gear_cart',JSON.stringify(cart));}
+function reconcileCart(){  // 重整後對照最新庫存，移除已下架、修正超量
+  let changed=false;
+  Object.keys(cart).forEach(id=>{
+    const eq=DATA.equipment.find(e=>e.id===id);
+    if(!eq||eq['狀態']!=='可借用'){delete cart[id];changed=true;return;}
+    const stock=Number(eq['數量'])||1;
+    cart[id].名稱=eq['名稱']; cart[id].stock=stock;
+    if(cart[id].數量>stock){cart[id].數量=stock;changed=true;}
+  });
+  if(changed) saveCart();
+}
 function addCart(id){
   const eq=DATA.equipment.find(e=>e.id===id); if(!eq) return;
   const stock=Number(eq['數量'])||1;
   if(!cart[id]) cart[id]={id,名稱:eq['名稱'],數量:1,stock};
   else if(cart[id].數量<stock) cart[id].數量++;
   else return toast('已達庫存上限','err');
-  render(); toast('已加入清單','ok');
+  saveCart(); render(); toast('已加入清單','ok');
 }
 function setQty(id,d){
   if(!cart[id]) return;
   cart[id].數量+=d;
   if(cart[id].數量<=0) delete cart[id];
   else if(cart[id].數量>cart[id].stock) cart[id].數量=cart[id].stock;
-  renderCart(); updateCart();
+  saveCart(); renderCart(); updateCart();
 }
-function removeCart(id){delete cart[id];renderCart();updateCart();render();}
+function removeCart(id){delete cart[id];saveCart();renderCart();updateCart();render();}
 function cartQtyTotal(){return Object.values(cart).reduce((s,c)=>s+c.數量,0);}
 function updateCart(){
   const fab=document.getElementById('cartFab');
@@ -446,7 +458,7 @@ document.getElementById('ckSubmit').onclick=async()=>{
   if(!p.聯絡方式||p.聯絡方式.indexOf('@')<0) return toast('請填寫有效 Email','err');
   toast('送出中…');
   const r=await api('create_reservations',p,true);
-  if(r.ok){ cart={}; closeModal('cartModal'); toast(`已送出 ${r.count} 項申請，等待審核`,'ok'); load(); }
+  if(r.ok){ cart={}; saveCart(); closeModal('cartModal'); toast(`已送出 ${r.count} 項申請，等待審核`,'ok'); load(); }
   else toast(r.error||'送出失敗','err');
 };
 
