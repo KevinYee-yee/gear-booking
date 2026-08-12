@@ -318,7 +318,8 @@ let adminCat='全部';       // 管理端器材清單的分類篩選
 let editBundleId=null, bundleSel={};  // 組合包編輯：id、勾選的器材({id:數量})
 let cartBundleExpanded={};            // 購物車內組合包展開狀態
 let expandedBundle={};                // 庫存頁「快速組合」預覽展開狀態
-let editMode=JSON.parse(sessionStorage.getItem('gear_editmode')||'null');  // 調整已送出專案時：{oldIds,借用人,部門,聯絡方式,用途,借出日,歸還日}
+let editMode=null;  // 調整已送出專案時：{oldIds,借用人,部門,聯絡方式,用途,借出日,歸還日}；純記憶體，重整頁面就自動退出，不會卡住
+let savedCart=null; // 進入調整模式時暫存的「真正待送出」購物車，調整期間不受影響，離開/完成後還原
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -772,7 +773,7 @@ function setView(v){viewMode=v;localStorage.setItem('gear_viewmode',v);render();
 function toggleGroup(n){expanded[n]=!expanded[n];render();}
 
 // ---- 購物車 ----
-function saveCart(){localStorage.setItem('gear_cart',JSON.stringify(cart));}
+function saveCart(){if(editMode)return;localStorage.setItem('gear_cart',JSON.stringify(cart));}  // 調整模式中的暫用清單不落地，不會污染真正的購物車
 function reconcileCart(){  // 重整後對照最新庫存，移除已下架、修正超量
   let changed=false;
   Object.keys(cart).forEach(id=>{
@@ -840,8 +841,8 @@ function openCart(){
   renderCart(); openModal('cartModal');
 }
 function exitEditMode(){
-  if(!confirm('離開調整模式？目前清單內容會被清空。')) return;
-  cart={}; saveCart(); editMode=null; sessionStorage.removeItem('gear_editmode');
+  if(!confirm('放棄這次調整？尚未儲存的變更會遺失（你原本的借用清單不受影響）。')) return;
+  editMode=null; cart=savedCart||{}; savedCart=null;
   closeModal('cartModal'); updateCart(); render();
 }
 function cartItemRow(c){
@@ -904,7 +905,7 @@ document.getElementById('ckSubmit').onclick=async()=>{
     toast('更新中…');
     const r=await api('edit_project',{oldIds:editMode.oldIds,items,借出日:s,歸還日:e2},true);
     if(r.ok){
-      cart={}; saveCart(); editMode=null; sessionStorage.removeItem('gear_editmode');
+      editMode=null; cart=savedCart||{}; savedCart=null; saveCart();
       closeModal('cartModal'); toast('已更新，重新進入待審核','ok'); load();
     } else toast(r.error||'失敗','err');
     return;
@@ -937,15 +938,13 @@ function openEditProject(idx,scope){
   const g=arr[idx]; if(!g) return;
   const liveItems=g.items.filter(i=>['待審核','已核准'].includes(i['狀態']));
   if(!liveItems.length) return toast('這個專案沒有可調整的項目','err');
-  if(Object.keys(cart).length && !confirm('借用清單目前有其他未送出的項目，切換到調整模式會先清空清單，確定？')) return;
+  savedCart=cart; // 暫存目前真正待送出的借用清單，調整期間完全不受影響
   cart={};
   liveItems.forEach(i=>{
     const eq=DATA.equipment.find(x=>x.id===i['器材id']);
     cart[i['器材id']]={id:i['器材id'],名稱:i['器材名稱'],數量:Number(i['數量'])||1,stock:eq?Number(eq['數量'])||1:99};
   });
-  saveCart();
   editMode={oldIds:liveItems.map(i=>i.id),借用人:g['借用人'],部門:g['部門'],聯絡方式:g['聯絡方式'],用途:g['用途']||'',借出日:liveItems[0]['借出日'],歸還日:liveItems[0]['歸還日']};
-  sessionStorage.setItem('gear_editmode',JSON.stringify(editMode));
   VIEW='inventory'; render();
   toast('已載入這個專案的器材，逛庫存調整後點右下角清單結帳','ok');
   openCart();
