@@ -138,6 +138,8 @@
   .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:5px}
   .field input,.field select,.field textarea{width:100%}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .dtrow{display:grid;grid-template-columns:1.3fr 1fr;gap:10px}
+  .dtrow input{color-scheme:dark}
   .modal .actions{display:flex;gap:10px;margin-top:18px}
   .modal .actions .btn{flex:1;justify-content:center;text-align:center}
   .bmpicklist{max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:4px 12px}
@@ -205,10 +207,10 @@
     <h2>借用清單</h2>
     <div class="sub">選好器材與數量，最後填一次借用資料送出</div>
     <div id="cartItems"></div>
-    <div class="row2" style="margin-top:16px">
-      <div class="field"><label>借出時間 *</label><input type="datetime-local" id="ckStart"></div>
-      <div class="field"><label>歸還時間 *</label><input type="datetime-local" id="ckEnd"></div>
-    </div>
+    <div class="field" style="margin-top:16px"><label>借出時間 *</label>
+      <div class="dtrow"><input type="date" id="ckStartDate"><input type="time" id="ckStartTime"></div></div>
+    <div class="field"><label>歸還時間 *</label>
+      <div class="dtrow"><input type="date" id="ckEndDate"><input type="time" id="ckEndTime"></div></div>
     <div class="row2">
       <div class="field"><label>借用人 *</label><input id="ckName" placeholder="姓名"></div>
       <div class="field"><label>部門 *</label><input id="ckDept" placeholder="所屬部門"></div>
@@ -800,7 +802,8 @@ function updateCart(){
 }
 function openCart(){
   if(!Object.keys(cart).length) return toast('清單是空的','err');
-  document.getElementById('ckStart').value=document.getElementById('ckStart').value||(todayStr()+'T09:00');
+  const sd=document.getElementById('ckStartDate'), st=document.getElementById('ckStartTime');
+  if(!sd.value){sd.value=todayStr();st.value='09:00';}
   // 自動帶入本機記住的上次借用資料
   const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
   const pf=(id,v)=>{const el=document.getElementById(id); if(v&&!el.value) el.value=v;};
@@ -857,11 +860,13 @@ function renderCart(){
 document.getElementById('ckSubmit').onclick=async()=>{
   const items=Object.values(cart).map(c=>({器材id:c.id,數量:c.數量}));
   if(!items.length) return toast('清單是空的','err');
-  const s=document.getElementById('ckStart').value, e2=document.getElementById('ckEnd').value;
+  const sd=document.getElementById('ckStartDate').value, st=document.getElementById('ckStartTime').value;
+  const ed=document.getElementById('ckEndDate').value, et=document.getElementById('ckEndTime').value;
+  const s=sd&&st?`${sd} ${st}`:'', e2=ed&&et?`${ed} ${et}`:'';
   const p={
     items,
-    借出日:s.replace('T',' '),
-    歸還日:e2.replace('T',' '),
+    借出日:s,
+    歸還日:e2,
     借用人:document.getElementById('ckName').value.trim(),
     部門:document.getElementById('ckDept').value.trim(),
     聯絡方式:document.getElementById('ckMail').value.trim(),
