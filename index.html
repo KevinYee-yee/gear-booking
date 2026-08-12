@@ -32,6 +32,7 @@
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:20px 0 12px}
   input,select,textarea{background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:10px;font-size:14px;font-family:inherit;outline:none}
   input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  input:disabled{opacity:.55;cursor:not-allowed}
   .search{flex:1;min-width:180px}
   .vtoggle{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .vtoggle button{background:var(--panel);border:none;color:var(--sub);padding:9px 13px;cursor:pointer;font-family:inherit;font-size:14px}
@@ -139,6 +140,7 @@
   .field input,.field select,.field textarea{width:100%}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .dtrow{display:grid;grid-template-columns:1.3fr 1fr;gap:10px}
+  .editexit{font-size:12px;color:var(--red);cursor:pointer;margin:-6px 0 12px;font-weight:600}
   .dtrow input{color-scheme:dark}
   .modal .actions{display:flex;gap:10px;margin-top:18px}
   .modal .actions .btn{flex:1;justify-content:center;text-align:center}
@@ -204,8 +206,9 @@
 <!-- 結帳 modal -->
 <div class="overlay" id="cartModal">
   <div class="modal">
-    <h2>借用清單</h2>
-    <div class="sub">選好器材與數量，最後填一次借用資料送出</div>
+    <h2 id="ckTitle">借用清單</h2>
+    <div class="sub" id="ckSub">選好器材與數量，最後填一次借用資料送出</div>
+    <div class="editexit hide" id="ckExitEdit" onclick="exitEditMode()">✕ 取消調整，清空並返回一般借用</div>
     <div id="cartItems"></div>
     <div class="field" style="margin-top:16px"><label>借出時間 *</label>
       <div class="dtrow"><input type="date" id="ckStartDate"><input type="time" id="ckStartTime"></div></div>
@@ -220,24 +223,6 @@
     <div class="actions">
       <button class="btn" onclick="closeModal('cartModal')">繼續挑選</button>
       <button class="btn pri" id="ckSubmit">送出申請</button>
-    </div>
-  </div>
-</div>
-
-<!-- 調整已送出的專案 modal -->
-<div class="overlay" id="editProjModal">
-  <div class="modal">
-    <h2>調整借用需求</h2>
-    <div class="sub">修改後這個專案的所有項目會退回待審核，需要重新核准</div>
-    <div id="epItems"></div>
-    <select id="epAddSelect" style="width:100%;margin-top:8px"></select>
-    <div class="field" style="margin-top:16px"><label>借出時間 *</label>
-      <div class="dtrow"><input type="date" id="epStartDate"><input type="time" id="epStartTime"></div></div>
-    <div class="field"><label>歸還時間 *</label>
-      <div class="dtrow"><input type="date" id="epEndDate"><input type="time" id="epEndTime"></div></div>
-    <div class="actions">
-      <button class="btn" onclick="closeModal('editProjModal')">取消</button>
-      <button class="btn pri" id="epSave">儲存並重新送審</button>
     </div>
   </div>
 </div>
@@ -333,7 +318,7 @@ let adminCat='全部';       // 管理端器材清單的分類篩選
 let editBundleId=null, bundleSel={};  // 組合包編輯：id、勾選的器材({id:數量})
 let cartBundleExpanded={};            // 購物車內組合包展開狀態
 let expandedBundle={};                // 庫存頁「快速組合」預覽展開狀態
-let editProj={oldIds:[],items:{}};    // 調整已送出專案：原始 row id 列表、目前編輯中的器材({id:數量})
+let editMode=JSON.parse(sessionStorage.getItem('gear_editmode')||'null');  // 調整已送出專案時：{oldIds,借用人,部門,聯絡方式,用途,借出日,歸還日}
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -825,12 +810,39 @@ function updateCart(){
 function openCart(){
   if(!Object.keys(cart).length) return toast('清單是空的','err');
   const sd=document.getElementById('ckStartDate'), st=document.getElementById('ckStartTime');
-  if(!sd.value){sd.value=todayStr();st.value='09:00';}
-  // 自動帶入本機記住的上次借用資料
-  const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
-  const pf=(id,v)=>{const el=document.getElementById(id); if(v&&!el.value) el.value=v;};
-  pf('ckName',me.name); pf('ckDept',me.dept); pf('ckMail',me.mail);
+  const edd=document.getElementById('ckEndDate'), et=document.getElementById('ckEndTime');
+  const nameEl=document.getElementById('ckName'), deptEl=document.getElementById('ckDept'),
+        mailEl=document.getElementById('ckMail'), purEl=document.getElementById('ckPurpose');
+  const idFields=[nameEl,deptEl,mailEl,purEl];
+  if(editMode){
+    document.getElementById('ckTitle').textContent='調整借用需求';
+    document.getElementById('ckSub').textContent='瀏覽庫存調整器材與時間，送出後這個專案會整個退回待審核';
+    document.getElementById('ckSubmit').textContent='儲存並重新送審';
+    document.getElementById('ckExitEdit').classList.remove('hide');
+    const sp=String(editMode.借出日).split(' '), ep=String(editMode.歸還日).split(' ');
+    sd.value=sp[0]||''; st.value=sp[1]||'09:00';
+    edd.value=ep[0]||''; et.value=ep[1]||'18:00';
+    nameEl.value=editMode.借用人||''; deptEl.value=editMode.部門||'';
+    mailEl.value=editMode.聯絡方式||''; purEl.value=editMode.用途||'';
+    idFields.forEach(el=>el.disabled=true);
+  }else{
+    document.getElementById('ckTitle').textContent='借用清單';
+    document.getElementById('ckSub').textContent='選好器材與數量，最後填一次借用資料送出';
+    document.getElementById('ckSubmit').textContent='送出申請';
+    document.getElementById('ckExitEdit').classList.add('hide');
+    idFields.forEach(el=>el.disabled=false);
+    if(!sd.value){sd.value=todayStr();st.value='09:00';}
+    // 自動帶入本機記住的上次借用資料
+    const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
+    const pf=(el,v)=>{ if(v&&!el.value) el.value=v; };
+    pf(nameEl,me.name); pf(deptEl,me.dept); pf(mailEl,me.mail);
+  }
   renderCart(); openModal('cartModal');
+}
+function exitEditMode(){
+  if(!confirm('離開調整模式？目前清單內容會被清空。')) return;
+  cart={}; saveCart(); editMode=null; sessionStorage.removeItem('gear_editmode');
+  closeModal('cartModal'); updateCart(); render();
 }
 function cartItemRow(c){
   const e=DATA.equipment.find(x=>x.id===c.id);
@@ -881,21 +893,32 @@ function renderCart(){
 
 document.getElementById('ckSubmit').onclick=async()=>{
   const items=Object.values(cart).map(c=>({器材id:c.id,數量:c.數量}));
-  if(!items.length) return toast('清單是空的','err');
   const sd=document.getElementById('ckStartDate').value, st=document.getElementById('ckStartTime').value;
   const ed=document.getElementById('ckEndDate').value, et=document.getElementById('ckEndTime').value;
   const s=sd&&st?`${sd} ${st}`:'', e2=ed&&et?`${ed} ${et}`:'';
+  if(!s||!e2) return toast('請填寫完整時間','err');
+  if(e2<=s) return toast('歸還時間需晚於借出時間','err');
+
+  if(editMode){
+    if(!items.length && !confirm('清單是空的，儲存後這個專案會被整個取消，確定？')) return;
+    toast('更新中…');
+    const r=await api('edit_project',{oldIds:editMode.oldIds,items,借出日:s,歸還日:e2},true);
+    if(r.ok){
+      cart={}; saveCart(); editMode=null; sessionStorage.removeItem('gear_editmode');
+      closeModal('cartModal'); toast('已更新，重新進入待審核','ok'); load();
+    } else toast(r.error||'失敗','err');
+    return;
+  }
+
+  if(!items.length) return toast('清單是空的','err');
   const p={
-    items,
-    借出日:s,
-    歸還日:e2,
+    items, 借出日:s, 歸還日:e2,
     借用人:document.getElementById('ckName').value.trim(),
     部門:document.getElementById('ckDept').value.trim(),
     聯絡方式:document.getElementById('ckMail').value.trim(),
     用途:document.getElementById('ckPurpose').value.trim(),
   };
-  if(!s||!e2||!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
-  if(p.歸還日<=p.借出日) return toast('歸還時間需晚於借出時間','err');
+  if(!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
   if(!p.聯絡方式||p.聯絡方式.indexOf('@')<0) return toast('請填寫有效 Email','err');
   toast('送出中…');
   const r=await api('create_reservations',p,true);
@@ -914,57 +937,19 @@ function openEditProject(idx,scope){
   const g=arr[idx]; if(!g) return;
   const liveItems=g.items.filter(i=>['待審核','已核准'].includes(i['狀態']));
   if(!liveItems.length) return toast('這個專案沒有可調整的項目','err');
-  editProj.oldIds=liveItems.map(i=>i.id);
-  editProj.items={};
+  if(Object.keys(cart).length && !confirm('借用清單目前有其他未送出的項目，切換到調整模式會先清空清單，確定？')) return;
+  cart={};
   liveItems.forEach(i=>{
     const eq=DATA.equipment.find(x=>x.id===i['器材id']);
-    editProj.items[i['器材id']]={id:i['器材id'],名稱:i['器材名稱'],數量:Number(i['數量'])||1,stock:eq?Number(eq['數量'])||1:99};
+    cart[i['器材id']]={id:i['器材id'],名稱:i['器材名稱'],數量:Number(i['數量'])||1,stock:eq?Number(eq['數量'])||1:99};
   });
-  const sp=String(liveItems[0]['借出日']).split(' '), ep=String(liveItems[0]['歸還日']).split(' ');
-  document.getElementById('epStartDate').value=sp[0]||''; document.getElementById('epStartTime').value=sp[1]||'09:00';
-  document.getElementById('epEndDate').value=ep[0]||''; document.getElementById('epEndTime').value=ep[1]||'18:00';
-  renderEditProj();
-  openModal('editProjModal');
+  saveCart();
+  editMode={oldIds:liveItems.map(i=>i.id),借用人:g['借用人'],部門:g['部門'],聯絡方式:g['聯絡方式'],用途:g['用途']||'',借出日:liveItems[0]['借出日'],歸還日:liveItems[0]['歸還日']};
+  sessionStorage.setItem('gear_editmode',JSON.stringify(editMode));
+  VIEW='inventory'; render();
+  toast('已載入這個專案的器材，逛庫存調整後點右下角清單結帳','ok');
+  openCart();
 }
-function renderEditProj(){
-  const el=document.getElementById('epItems');
-  const list=Object.values(editProj.items);
-  el.innerHTML=list.length?list.map(c=>`
-    <div class="citem"><div class="citemtop">
-      <div class="cn">${c.名稱}<div class="meta">庫存 ${c.stock}</div></div>
-      <div class="step"><button onclick="epQty('${c.id}',-1)">−</button><span class="qv">${c.數量}</span><button onclick="epQty('${c.id}',1)" ${c.數量>=c.stock?'disabled':''}>+</button></div>
-      <button class="rm" onclick="epRemove('${c.id}')">✕</button>
-    </div></div>`).join(''):`<div class="empty" style="padding:16px">已全部移除，儲存後這個專案會被取消</div>`;
-  const avail=DATA.equipment.filter(e=>e['狀態']==='可借用'&&!editProj.items[e.id]);
-  document.getElementById('epAddSelect').innerHTML=`<option value="">+ 新增器材…</option>`+avail.map(e=>`<option value="${e.id}">${e['名稱']}</option>`).join('');
-}
-function epQty(id,d){
-  if(!editProj.items[id])return;
-  editProj.items[id].數量+=d;
-  if(editProj.items[id].數量<=0) delete editProj.items[id];
-  else if(editProj.items[id].數量>editProj.items[id].stock) editProj.items[id].數量=editProj.items[id].stock;
-  renderEditProj();
-}
-function epRemove(id){delete editProj.items[id];renderEditProj();}
-document.getElementById('epAddSelect').onchange=function(){
-  const id=this.value; if(!id) return;
-  const eq=DATA.equipment.find(x=>x.id===id); if(!eq) return;
-  editProj.items[id]={id,名稱:eq['名稱'],數量:1,stock:Number(eq['數量'])||1};
-  renderEditProj();
-};
-document.getElementById('epSave').onclick=async()=>{
-  const items=Object.values(editProj.items).map(c=>({器材id:c.id,數量:c.數量}));
-  const sd=document.getElementById('epStartDate').value, st=document.getElementById('epStartTime').value;
-  const ed=document.getElementById('epEndDate').value, et=document.getElementById('epEndTime').value;
-  if(!sd||!st||!ed||!et) return toast('請填寫完整時間','err');
-  const s=`${sd} ${st}`, e2=`${ed} ${et}`;
-  if(e2<=s) return toast('歸還時間需晚於借出時間','err');
-  if(!items.length && !confirm('清單是空的，儲存後這個專案會被整個取消，確定？')) return;
-  toast('更新中…');
-  const r=await api('edit_project',{oldIds:editProj.oldIds,items,借出日:s,歸還日:e2},true);
-  if(r.ok){ closeModal('editProjModal'); toast('已更新，重新進入待審核','ok'); load(); }
-  else toast(r.error||'失敗','err');
-};
 
 // ---- 管理端 ----
 document.getElementById('pinSubmit').onclick=()=>{const v=document.getElementById('pinInput').value.trim();if(!v)return;ADMIN_PIN=v;sessionStorage.setItem('gear_pin',v);closeModal('pinModal');render();};
