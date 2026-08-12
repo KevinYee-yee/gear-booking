@@ -46,6 +46,7 @@ function handle(e) {
       case 'create_reservations': out = apiCreateReservations(params); break; // 購物車批次
       case 'cancel_reservation':  out = apiCancelReservation(params); break;
       case 'review':              out = apiReview(params); break;
+      case 'review_batch':        out = apiReviewBatch(params); break;
       case 'return':              out = apiReturn(params); break;
       case 'add_equipment':       out = apiAddEquipment(params); break;
       case 'update_equipment':    out = apiUpdateEquipment(params); break;
@@ -173,6 +174,48 @@ function apiReview(p) {
     (approved ? '\n請於借出日前往領取器材。' : '\n如有疑問請聯繫器材管理人員。') + '\n\n' + APP_URL);
 
   return { ok: true };
+}
+
+// ====== 批次審核（管理端）：一次處理多筆、只寄一封彙整信 ======
+function apiReviewBatch(p) {
+  requireAdmin(p);
+  requireFields(p, ['ids', 'decision']);
+  var ids = p['ids'];
+  if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (e) {} }
+  if (!ids || !ids.length) return { ok: false, error: '沒有項目' };
+
+  var approved = p.decision === 'approve';
+  var note = p['審核備註'] || '';
+  var done = [], failed = [];
+  var applicant = '', name = '', proj = '', period = '';
+
+  for (var i = 0; i < ids.length; i++) {
+    var r = findRowById(SHEET_RESV, ids[i]);
+    if (!r.row || r.data['狀態'] !== '待審核') continue;
+    if (approved) {
+      var qty = Number(r.data['數量']) || 1;
+      var a = availability(r.data['器材id'], r.data['借出日'], r.data['歸還日'], ids[i]);
+      if (qty > a.free) { failed.push(r.data['器材名稱'] + '（剩 ' + a.free + '）'); continue; }
+      setCell(SHEET_RESV, r.row, '狀態', '已核准');
+    } else {
+      setCell(SHEET_RESV, r.row, '狀態', '已拒絕');
+    }
+    if (note) setCell(SHEET_RESV, r.row, '審核備註', note);
+    done.push({ 名稱: r.data['器材名稱'], 數量: Number(r.data['數量']) || 1 });
+    applicant = r.data['聯絡方式']; name = r.data['借用人'];
+    proj = r.data['用途']; period = r.data['借出日'] + ' ~ ' + r.data['歸還日'];
+  }
+
+  if (done.length) {
+    var lines = done.map(function (d) { return '　• ' + d['名稱'] + ' ×' + d['數量']; }).join('\n');
+    notify(applicant,
+      '【器材預約】' + (approved ? '已核准' : '未通過') + '：' + (proj || name),
+      name + ' 您好，\n\n您的預約' + (approved ? '已核准 ✅' : '未通過 ❌') + '：\n\n' +
+      (proj ? '專案：' + proj + '\n' : '') + '期間：' + period + '\n\n' + lines + '\n' +
+      (note ? '\n備註：' + note + '\n' : '') +
+      (approved ? '\n請於借出日前往領取器材。' : '\n如有疑問請聯繫器材管理人員。') + '\n\n' + APP_URL);
+  }
+  return { ok: true, done: done.length, failed: failed };
 }
 
 // ====== 歸還（管理端）======

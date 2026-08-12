@@ -663,13 +663,14 @@ async function cancelResv(id){ if(!confirm('確定取消？'))return; const r=aw
 
 // ---- 管理端 ----
 document.getElementById('pinSubmit').onclick=()=>{const v=document.getElementById('pinInput').value.trim();if(!v)return;ADMIN_PIN=v;sessionStorage.setItem('gear_pin',v);closeModal('pinModal');render();};
-async function review(id,decision){const note=decision==='reject'?(prompt('拒絕原因（可留空）：')||''):'';const r=await api('review',{id,decision,pin:ADMIN_PIN,審核備註:note},true);r.ok?(toast(decision==='approve'?'已核准':'已拒絕','ok'),load()):toast(r.error,'err');}
 async function doReview(ids,decision,note){
   if(!ids.length) return;
   toast(decision==='approve'?'核准中…':'處理中…');
-  let fail=0,msg='';
-  for(const id of ids){const r=await api('review',{id,decision,pin:ADMIN_PIN,審核備註:note||''},true);if(!r.ok){fail++;msg=r.error;}}
-  toast(fail?`${fail} 項未成功：${msg}`:(decision==='approve'?'已全部核准':'已處理'),fail?'err':'ok');
+  const r=await api('review_batch',{ids,decision,pin:ADMIN_PIN,審核備註:note||''},true);
+  if(r.ok){
+    const f=(r.failed&&r.failed.length)?`，${r.failed.length} 項不足未過`:'';
+    toast((decision==='approve'?`已核准 ${r.done} 項`:`已拒絕 ${r.done} 項`)+f, r.failed&&r.failed.length?'err':'ok');
+  } else toast(r.error||'失敗','err');
   load();
 }
 function approveAll(idx){
