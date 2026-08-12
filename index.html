@@ -42,13 +42,14 @@
   .fchip.on{border-color:var(--accent);color:var(--accent)}
 
   /* card view */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:8px}
-  .card h3{margin:2px 0;font-size:16px}
-  .cardtop{display:flex;align-items:center;gap:10px}
-  .cico{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto;overflow:hidden}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:9px}
+  .card h3{margin:0;font-size:17px;font-weight:700;line-height:1.35}
+  .cardtop{display:flex;align-items:flex-start;gap:12px}
+  .cico{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex:0 0 auto;overflow:hidden;margin-top:2px}
   .cico img{width:100%;height:100%;object-fit:cover}
   .cardtop h3{flex:1;min-width:0}
+  .cardmeta1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .lico{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
   .cattag{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
   .accbadge{font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap}
@@ -377,7 +378,7 @@ function renderInventory(){
   const q=searchQ.toLowerCase();
   const items=DATA.equipment.filter(e=>{
     const okCat=filterCat==='全部'||e['分類']===filterCat;
-    const okQ=!q||(e['名稱']+e['型號']+e['分類']+e['序號']+(e['群組']||'')).toLowerCase().includes(q);
+    const okQ=!q||(e['名稱']+e['型號']+e['分類']+e['序號']+(e['群組']||'')+(e['備註']||'')+(e['附帶']||'')).toLowerCase().includes(q);
     return okCat&&okQ;
   });
   const units=buildUnits(items);
@@ -392,7 +393,7 @@ function renderInventory(){
   else body=cardView(units);
   return `
     <div class="toolbar">
-      <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 群組…" value="${searchQ}">
+      <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 用途 / 配件…" value="${searchQ}">
       <div class="vtoggle">
         <button class="${viewMode==='card'?'on':''}" onclick="setView('card')">▦ 卡片</button>
         <button class="${viewMode==='list'?'on':''}" onclick="setView('list')">☰ 列表</button>
@@ -417,8 +418,8 @@ function cardView(units){
       const hasAcc=accCount(e)>0;
       return `<div class="card" style="border-left:3px solid ${s.c}">
         <div class="cardtop"><div class="cico" style="background:${s.c}22">${ico}</div>
-          <h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']} ${accBadge(e)}</h3>${liveBadge(e)}</div>
-        <div class="meta">${catTag(e['分類'])}${e['型號']?' · '+e['型號']:''}${(Number(e['數量'])||1)>1?' · 庫存 '+e['數量']:''}</div>
+          <h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']}</h3></div>
+        <div class="cardmeta1">${liveBadge(e)}${catTag(e['分類'])}${e['型號']?`<span class="meta">${e['型號']}</span>`:''}${(Number(e['數量'])||1)>1?`<span class="meta">庫存 ${e['數量']}</span>`:''}${hasAcc?`<span onclick="toggleAcc('${e.id}')" style="cursor:pointer">${accBadge(e)}</span>`:''}</div>
         ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
         ${hasAcc&&expandedAcc[e.id]?accChecklist(e):''}
         <div style="flex:1"></div>${addBtn(e)}</div>`;
@@ -428,9 +429,9 @@ function cardView(units){
       <div class="grpline" onclick="toggleGroup('${u.name}')">
         <span class="caret ${open?'open':''}">▶</span>
         <div class="cico" style="background:${s.c}22">${s.e}</div>
-        <h3 style="flex:1">${u.name}</h3><span class="cat-tag">${u.items.length} 種</span>
+        <h3 style="flex:1">${u.name}</h3>
       </div>
-      <div class="meta">${catTag(u.cat)} · 點開選規格</div>
+      <div class="cardmeta1"><span class="cat-tag">${u.items.length} 種規格</span>${catTag(u.cat)}<span class="meta">點開選規格</span></div>
       ${open?`<div class="variants">${u.items.map(e=>`
         <div class="vrow"><span class="vn">${e['名稱']} ${liveBadge(e)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
     </div>`;
