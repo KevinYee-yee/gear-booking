@@ -8,6 +8,10 @@
  *   群組：同群組的器材在前端會收合成一張可展開的卡（例如記憶卡分容量）；留空＝獨立一項
  *   數量：庫存數量（同型可借幾份）；獨立器材填 1
  *
+ * 工作表「組合包」欄位（第 1 列為標題，管理端可自行增刪改，不用改程式碼）：
+ *   A:id B:名稱 C:說明 D:項目(JSON字串: [{"器材id":"E1","數量":1},...]) E:狀態
+ *   狀態值：啟用 / 停用
+ *
  * 工作表「預約」欄位（第 1 列為標題）：
  *   A:id B:器材id C:器材名稱 D:借用人 E:部門 F:聯絡方式(Email)
  *   G:借出日 H:歸還日 I:用途 J:狀態 K:申請時間 L:審核備註 M:數量
@@ -20,8 +24,9 @@ var NOTIFY = true;               // 是否開啟 email 通知
 var ADMIN_EMAIL = '';            // 收「新申請通知」的信箱；留空＝寄給指令碼擁有者（你）
 var APP_URL = 'https://kevinyee-yee.github.io/gear-booking/';
 
-var SHEET_EQUIP = '器材';
-var SHEET_RESV  = '預約';
+var SHEET_EQUIP  = '器材';
+var SHEET_RESV   = '預約';
+var SHEET_BUNDLE = '組合包';
 
 // ====== 入口 ======
 function doGet(e)  { return handle(e); }
@@ -52,6 +57,9 @@ function handle(e) {
       case 'add_equipment':       out = apiAddEquipment(params); break;
       case 'update_equipment':    out = apiUpdateEquipment(params); break;
       case 'delete_equipment':    out = apiDeleteEquipment(params); break;
+      case 'add_bundle':          out = apiAddBundle(params); break;
+      case 'update_bundle':       out = apiUpdateBundle(params); break;
+      case 'delete_bundle':       out = apiDeleteBundle(params); break;
       default: out = { ok: false, error: '未知的 action: ' + action };
     }
   } catch (err) {
@@ -62,7 +70,37 @@ function handle(e) {
 
 // ====== 讀取（公開）======
 function apiList() {
-  return { ok: true, equipment: readSheet(SHEET_EQUIP), reservations: readSheet(SHEET_RESV) };
+  var bundles = [];
+  try { bundles = readSheet(SHEET_BUNDLE); } catch (e) {} // 表不存在時不影響其他功能
+  return { ok: true, equipment: readSheet(SHEET_EQUIP), reservations: readSheet(SHEET_RESV), bundles: bundles };
+}
+
+// ====== 組合包增刪改（管理端）======
+function apiAddBundle(p) {
+  requireAdmin(p);
+  requireFields(p, ['名稱', '項目']);
+  var sh = sheet(SHEET_BUNDLE);
+  var id = 'K' + new Date().getTime();
+  sh.appendRow([id, p['名稱'], p['說明'] || '', p['項目'], p['狀態'] || '啟用']);
+  return { ok: true, id: id };
+}
+function apiUpdateBundle(p) {
+  requireAdmin(p);
+  requireFields(p, ['id']);
+  var r = findRowById(SHEET_BUNDLE, p['id']);
+  if (!r.row) return { ok: false, error: '找不到組合包' };
+  ['名稱', '說明', '項目', '狀態'].forEach(function (col) {
+    if (p[col] != null) setCell(SHEET_BUNDLE, r.row, col, p[col]);
+  });
+  return { ok: true };
+}
+function apiDeleteBundle(p) {
+  requireAdmin(p);
+  requireFields(p, ['id']);
+  var r = findRowById(SHEET_BUNDLE, p['id']);
+  if (!r.row) return { ok: false, error: '找不到組合包' };
+  sheet(SHEET_BUNDLE).deleteRow(r.row);
+  return { ok: true };
 }
 
 // ====== 建立單筆預約（公開，保留相容）======
@@ -433,6 +471,22 @@ function upgradeSchema() {
     eq.getRange(2, cAcc,  last - 1, 1).setValues(accs);
   }
   Logger.log('升級完成');
+}
+
+/**
+ * 非破壞性：建立「組合包」工作表（若已存在則不動它）。跑一次即可，可重複執行。
+ */
+function setupBundleSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_BUNDLE);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_BUNDLE);
+    sh.appendRow(['id', '名稱', '說明', '項目', '狀態']);
+    sh.setFrozenRows(1);
+    Logger.log('已建立「組合包」工作表');
+  } else {
+    Logger.log('「組合包」工作表已存在，未變動');
+  }
 }
 
 /**

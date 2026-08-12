@@ -38,16 +38,31 @@
   .vtoggle button.on{background:var(--accent);color:#1a1400;font-weight:600}
 
   .pill-filter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+
+  /* 首次使用引導 */
+  .onboard{background:linear-gradient(135deg,#20241a,#171a21);border:1px solid var(--line);border-radius:12px;padding:14px 40px 14px 16px;margin:16px 0;position:relative}
+  .obclose{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--sub);font-size:15px;cursor:pointer}
+  .obsteps{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .obstep{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt)}
+  .obnum{background:var(--accent);color:#1a1400;font-weight:700;font-size:12px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .obarrow{color:var(--sub)}
+
+  /* 快速組合包 */
+  .bwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:8px}
+  .bcard{background:linear-gradient(160deg,#241f14,var(--panel));border:1px solid #4a3d20;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px}
+  .bt{font-weight:700;font-size:15px}
+  .bnames{line-height:1.5}
   .fchip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--sub);cursor:pointer;font-size:13px}
   .fchip.on{border-color:var(--accent);color:var(--accent)}
 
-  /* card view */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:9px}
-  .card h3{margin:0;font-size:17px;font-weight:700;line-height:1.35}
+  /* card view — 大圖在上，像電商卡片 */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column}
+  .cphoto{width:100%;aspect-ratio:4/3;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:52px;overflow:hidden;position:relative;text-align:center}
+  .cphoto img{width:100%;height:100%;object-fit:cover}
+  .cbody{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .card h3{margin:0;font-size:16px;font-weight:700;line-height:1.35}
   .cardtop{display:flex;align-items:flex-start;gap:12px}
-  .cico{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex:0 0 auto;overflow:hidden;margin-top:2px}
-  .cico img{width:100%;height:100%;object-fit:cover}
   .cardtop h3{flex:1;min-width:0}
   .cardmeta1{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .lico{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
@@ -118,6 +133,14 @@
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .modal .actions{display:flex;gap:10px;margin-top:18px}
   .modal .actions .btn{flex:1;justify-content:center;text-align:center}
+  .bmpicklist{max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;padding:4px 12px}
+  .bmgrouphead{font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;padding:8px 0 4px;border-top:1px solid var(--line);margin-top:2px}
+  .bmgrouphead:first-child{border-top:none;margin-top:0}
+  .bmrow{display:flex;align-items:center;gap:10px;padding:6px 0}
+  .bmrow label{flex:1;font-size:14px;display:flex;align-items:center;gap:8px;cursor:pointer}
+  .bmrow input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
+  .bmrow input[type=number]{width:56px;padding:5px 6px}
+
   .citem{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
   .citem:first-child{border-top:none}
   .citemtop{display:flex;align-items:center;gap:10px}
@@ -241,13 +264,31 @@
   </div>
 </div>
 
+<!-- 組合包編輯 modal -->
+<div class="overlay" id="bundleModal">
+  <div class="modal">
+    <h2 id="bmTitle">新增組合</h2>
+    <div class="field"><label>名稱 *</label><input id="bmName" placeholder="例：基礎攝影組"></div>
+    <div class="field"><label>說明</label><input id="bmDesc" placeholder="給非攝影背景同事看的簡短說明"></div>
+    <div class="field"><label>狀態</label><select id="bmStatus"><option>啟用</option><option>停用</option></select></div>
+    <div class="field"><label>選擇器材與數量</label>
+      <div class="bmpicklist" id="bmPickList"></div>
+    </div>
+    <div class="actions">
+      <button class="btn rd" id="bmDelete" style="flex:0 0 auto">刪除</button>
+      <button class="btn" onclick="closeModal('bundleModal')">取消</button>
+      <button class="btn pri" id="bmSave">儲存</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
 
-let DATA={equipment:[],reservations:[]};
+let DATA={equipment:[],reservations:[],bundles:[]};
 let VIEW='inventory';
 let ADMIN_PIN=sessionStorage.getItem('gear_pin')||'';
 let filterCat='全部', searchQ='';
@@ -257,6 +298,7 @@ let expandedResv={};       // 預約專案卡展開狀態
 let adGroups=[], myGroups=[]; // 目前渲染的預約分組（管理端 / 查詢）
 let expandedAcc={};        // 器材「附帶清單」展開狀態
 let adminCat='全部';       // 管理端器材清單的分類篩選
+let editBundleId=null, bundleSel={};  // 組合包編輯：id、勾選的器材({id:數量})
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -392,6 +434,8 @@ function renderInventory(){
   else if(viewMode==='list') body=listView(units);
   else body=cardView(units);
   return `
+    ${onboardBanner()}
+    ${bundleSection()}
     <div class="toolbar">
       <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 用途 / 配件…" value="${searchQ}">
       <div class="vtoggle">
@@ -404,6 +448,56 @@ function renderInventory(){
     ${body}`;
 }
 
+// ---- 首次使用引導（一次性，關閉後不再顯示）----
+function onboardBanner(){
+  if(localStorage.getItem('gear_onboard_dismissed')) return '';
+  return `<div class="onboard">
+    <button class="obclose" onclick="dismissOnboard()">✕</button>
+    <div class="obsteps">
+      <div class="obstep"><span class="obnum">1</span>挑選器材，點「加入清單」</div>
+      <div class="obarrow">→</div>
+      <div class="obstep"><span class="obnum">2</span>填寫借用人／部門／Email 送出</div>
+      <div class="obarrow">→</div>
+      <div class="obstep"><span class="obnum">3</span>等待審核通過，即可依時段領取</div>
+    </div>
+  </div>`;
+}
+function dismissOnboard(){localStorage.setItem('gear_onboard_dismissed','1');render();}
+
+// ---- 快速組合包 ----
+function bundleSection(){
+  const list=(DATA.bundles||[]).filter(b=>b['狀態']!=='停用');
+  if(!list.length) return '';
+  const cards=list.map(b=>{
+    let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
+    const names=items.map(it=>{const eq=DATA.equipment.find(x=>x.id===it['器材id']);return eq?eq['名稱']+(it['數量']>1?' ×'+it['數量']:''):null;}).filter(Boolean);
+    return `<div class="bcard">
+      <div class="bt">🎁 ${b['名稱']}</div>
+      ${b['說明']?`<div class="meta">${b['說明']}</div>`:''}
+      <div class="meta bnames">${names.join('、')}</div>
+      <button class="btn pri sm" onclick="addBundleToCart('${b.id}')">整組加入清單</button>
+    </div>`;
+  }).join('');
+  return `<div class="sec-title" style="margin-top:4px">🎁 快速組合</div><div class="bwrap">${cards}</div>`;
+}
+function addBundleToCart(id){
+  const b=(DATA.bundles||[]).find(x=>x.id===id); if(!b) return;
+  let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
+  let added=0, skipped=[];
+  items.forEach(it=>{
+    const eq=DATA.equipment.find(x=>x.id===it['器材id']);
+    if(!eq||eq['狀態']!=='可借用'){skipped.push(eq?eq['名稱']:it['器材id']);return;}
+    const stock=Number(eq['數量'])||1, want=Number(it['數量'])||1;
+    if(!cart[eq.id]) cart[eq.id]={id:eq.id,名稱:eq['名稱'],數量:0,stock};
+    const next=cart[eq.id].數量+want;
+    if(next>stock){cart[eq.id].數量=stock;skipped.push(eq['名稱']+'（庫存不足，已加到上限）');}
+    else cart[eq.id].數量=next;
+    added++;
+  });
+  saveCart(); render();
+  toast(skipped.length?`已加入，但 ${skipped.length} 項需注意：${skipped.join('；')}`:`已整組加入清單（${added} 項）`, skipped.length?'err':'ok');
+}
+
 function addBtn(eq){
   if(!bookable(eq)) return '';
   const inCart=cart[eq.id]?` (${cart[eq.id].數量})`:'';
@@ -414,27 +508,30 @@ function cardView(units){
   return `<div class="grid">${units.map(u=>{
     if(u.type==='single'){
       const e=u.item, s=catStyle(e['分類']);
-      const ico=e['照片網址']?`<img src="${e['照片網址']}" alt="">`:s.e;
+      const photo=e['照片網址']?`<img src="${e['照片網址']}" alt="">`:s.e;
       const hasAcc=accCount(e)>0;
-      return `<div class="card" style="border-left:3px solid ${s.c}">
-        <div class="cardtop"><div class="cico" style="background:${s.c}22">${ico}</div>
-          <h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']}</h3></div>
-        <div class="cardmeta1">${liveBadge(e)}${catTag(e['分類'])}${e['型號']?`<span class="meta">${e['型號']}</span>`:''}${(Number(e['數量'])||1)>1?`<span class="meta">庫存 ${e['數量']}</span>`:''}${hasAcc?`<span onclick="toggleAcc('${e.id}')" style="cursor:pointer">${accBadge(e)}</span>`:''}</div>
-        ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
-        ${hasAcc&&expandedAcc[e.id]?accChecklist(e):''}
-        <div style="flex:1"></div>${addBtn(e)}</div>`;
+      return `<div class="card">
+        <div class="cphoto" style="background:${s.c}1c;color:${s.c}">${photo}</div>
+        <div class="cbody">
+          <div class="cardtop"><h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']}</h3></div>
+          <div class="cardmeta1">${liveBadge(e)}${catTag(e['分類'])}${e['型號']?`<span class="meta">${e['型號']}</span>`:''}${(Number(e['數量'])||1)>1?`<span class="meta">庫存 ${e['數量']}</span>`:''}${hasAcc?`<span onclick="toggleAcc('${e.id}')" style="cursor:pointer">${accBadge(e)}</span>`:''}</div>
+          ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
+          ${hasAcc&&expandedAcc[e.id]?accChecklist(e):''}
+          <div style="flex:1"></div>${addBtn(e)}
+        </div></div>`;
     }
     const open=expanded[u.name], s=catStyle(u.cat);
-    return `<div class="card" style="border-left:3px solid ${s.c}">
-      <div class="grpline" onclick="toggleGroup('${u.name}')">
-        <span class="caret ${open?'open':''}">▶</span>
-        <div class="cico" style="background:${s.c}22">${s.e}</div>
-        <h3 style="flex:1">${u.name}</h3>
-      </div>
-      <div class="cardmeta1"><span class="cat-tag">${u.items.length} 種規格</span>${catTag(u.cat)}<span class="meta">點開選規格</span></div>
-      ${open?`<div class="variants">${u.items.map(e=>`
-        <div class="vrow"><span class="vn">${e['名稱']} ${liveBadge(e)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
-    </div>`;
+    return `<div class="card">
+      <div class="cphoto" style="background:${s.c}1c;color:${s.c};cursor:pointer" onclick="toggleGroup('${u.name}')">${s.e}<span class="cat-tag" style="position:absolute;top:10px;right:10px">${u.items.length} 種</span></div>
+      <div class="cbody">
+        <div class="grpline" onclick="toggleGroup('${u.name}')">
+          <span class="caret ${open?'open':''}">▶</span>
+          <h3 style="flex:1">${u.name}</h3>
+        </div>
+        <div class="cardmeta1">${catTag(u.cat)}<span class="meta">點開選規格</span></div>
+        ${open?`<div class="variants">${u.items.map(e=>`
+          <div class="vrow"><span class="vn">${e['名稱']} ${liveBadge(e)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
+      </div></div>`;
   }).join('')}</div>`;
 }
 
@@ -584,7 +681,20 @@ function renderAdmin(){
     <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>器材清單（${adEquip.length}/${DATA.equipment.length}）</span>
       <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button></div>
     <div class="pill-filter">${adChips}</div>
-    <div class="rowlist">${eHtml}</div>`;
+    <div class="rowlist">${eHtml}</div>
+    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>🎁 組合包（${(DATA.bundles||[]).length}）</span>
+      <button class="btn pri sm" onclick="openBundle(null)">+ 新增組合</button></div>
+    <div class="rowlist">${bundleAdminHtml()}</div>`;
+}
+function bundleAdminHtml(){
+  const list=DATA.bundles||[];
+  if(!list.length) return `<div class="empty">還沒有組合包，點上方「+ 新增組合」建立</div>`;
+  return list.map(b=>{
+    let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
+    return `<div class="item"><div class="grow"><div class="t">🎁 ${b['名稱']} ${b['狀態']==='停用'?badge('停用'):''}</div>
+      <div class="meta">${b['說明']||''}${b['說明']?' · ':''}${items.length} 項器材</div></div>
+      <button class="btn sm" onclick="openBundle('${b.id}')">編輯</button></div>`;
+  }).join('');
 }
 
 // ---- 互動 ----
@@ -797,6 +907,58 @@ document.getElementById('emSave').onclick=async()=>{
   r.ok?(closeModal('equipModal'),toast('已儲存','ok'),load()):toast(r.error,'err');
 };
 document.getElementById('emDelete').onclick=async()=>{if(!confirm('確定刪除？'))return;const r=await api('delete_equipment',{id:editEquipId,pin:ADMIN_PIN},true);r.ok?(closeModal('equipModal'),toast('已刪除','ok'),load()):toast(r.error,'err');};
+
+// ---- 組合包編輯（管理端）----
+function openBundle(id){
+  editBundleId=id;
+  const b=id?(DATA.bundles||[]).find(x=>x.id===id):null;
+  document.getElementById('bmTitle').textContent=id?'編輯組合':'新增組合';
+  document.getElementById('bmName').value=b?b['名稱']||'':'';
+  document.getElementById('bmDesc').value=b?b['說明']||'':'';
+  document.getElementById('bmStatus').value=b?(b['狀態']||'啟用'):'啟用';
+  document.getElementById('bmDelete').style.display=id?'block':'none';
+  bundleSel={};
+  if(b){let items=[];try{items=JSON.parse(b['項目']||'[]');}catch(e){}items.forEach(it=>bundleSel[it['器材id']]=Number(it['數量'])||1);}
+  renderBundlePickList();
+  openModal('bundleModal');
+}
+function renderBundlePickList(){
+  const cats=[...new Set(DATA.equipment.map(e=>e['分類']).filter(Boolean))];
+  let html='';
+  cats.forEach(cat=>{
+    const items=DATA.equipment.filter(e=>e['分類']===cat);
+    if(!items.length) return;
+    html+=`<div class="bmgrouphead">${catStyle(cat).e} ${cat}</div>`;
+    items.forEach(e=>{
+      const checked=bundleSel[e.id]!=null;
+      html+=`<div class="bmrow">
+        <label><input type="checkbox" data-id="${e.id}" ${checked?'checked':''} onchange="bmToggle('${e.id}',this.checked)">${e['名稱']}</label>
+        <input type="number" min="1" value="${checked?bundleSel[e.id]:1}" data-qty="${e.id}" oninput="bmQty('${e.id}',this.value)" ${checked?'':'disabled'}>
+      </div>`;
+    });
+  });
+  document.getElementById('bmPickList').innerHTML=html||'<div class="empty" style="padding:16px">尚無器材</div>';
+}
+function bmToggle(id,checked){
+  if(checked) bundleSel[id]=bundleSel[id]||1; else delete bundleSel[id];
+  const qtyInput=document.querySelector(`[data-qty="${id}"]`); if(qtyInput) qtyInput.disabled=!checked;
+}
+function bmQty(id,v){if(bundleSel[id]!=null) bundleSel[id]=Math.max(1,Number(v)||1);}
+document.getElementById('bmSave').onclick=async()=>{
+  const name=document.getElementById('bmName').value.trim();
+  if(!name) return toast('請填寫名稱','err');
+  const items=Object.keys(bundleSel).map(id=>({器材id:id,數量:bundleSel[id]}));
+  if(!items.length) return toast('請至少勾選一項器材','err');
+  const p={pin:ADMIN_PIN,名稱:name,說明:document.getElementById('bmDesc').value.trim(),
+    狀態:document.getElementById('bmStatus').value,項目:JSON.stringify(items)};
+  const r=editBundleId?await api('update_bundle',{id:editBundleId,...p},true):await api('add_bundle',p,true);
+  r.ok?(closeModal('bundleModal'),toast('已儲存','ok'),load()):toast(r.error,'err');
+};
+document.getElementById('bmDelete').onclick=async()=>{
+  if(!confirm('確定刪除此組合？'))return;
+  const r=await api('delete_bundle',{id:editBundleId,pin:ADMIN_PIN},true);
+  r.ok?(closeModal('bundleModal'),toast('已刪除','ok'),load()):toast(r.error,'err');
+};
 
 // ---- 共用 ----
 function openModal(id){document.getElementById(id).classList.add('on');}
