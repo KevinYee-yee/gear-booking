@@ -48,8 +48,8 @@
   .obarrow{color:var(--sub)}
 
   /* 快速組合包 */
-  .bwrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:8px}
-  .bcard{background:linear-gradient(160deg,#241f14,var(--panel));border:1px solid #4a3d20;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+  .bwrap{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;margin-bottom:8px}
+  .bcard{background:linear-gradient(160deg,#241f14,var(--panel));border:1px solid #4a3d20;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px;flex:0 1 280px;min-width:240px;max-width:340px}
   .bt{font-weight:700;font-size:15px}
   .bthumbs{display:flex;gap:6px;cursor:pointer}
   .bthumb{border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex:0 0 auto}
@@ -512,9 +512,12 @@ function bundleSection(){
   const list=(DATA.bundles||[]).filter(b=>b['狀態']!=='停用');
   if(!list.length) return '';
   const MINOR_CATS=['電源','配件'];  // 這些歸為「小配件」，縮圖預覽只帶出大品項
+  const CAT_ORDER=['相機','鏡頭','穩定器','燈光','音訊','腳架','儲存','電源','配件','雜項'];
+  const catRank=cat=>{const i=CAT_ORDER.indexOf(cat);return i<0?CAT_ORDER.length:i;};
   const cards=list.map(b=>{
     let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
-    const withEq=items.map(it=>({eq:DATA.equipment.find(x=>x.id===it['器材id']),qty:it['數量']})).filter(x=>x.eq);
+    const withEq=items.map(it=>({eq:DATA.equipment.find(x=>x.id===it['器材id']),qty:it['數量']})).filter(x=>x.eq)
+      .sort((a,b)=>catRank(a.eq['分類'])-catRank(b.eq['分類'])); // 主要器材在前、小配件在後，順序才有邏輯
     const major=withEq.filter(x=>MINOR_CATS.indexOf(x.eq['分類'])<0);
     const shownThumbs=(major.length?major:withEq).slice(0,4);
     const restCount=withEq.length-shownThumbs.length;
