@@ -145,6 +145,10 @@
   .citem:first-child{border-top:none}
   .citemtop{display:flex;align-items:center;gap:10px}
   .citem .cn{flex:1;font-size:14px}
+  .cbundle{background:linear-gradient(160deg,#241f14,transparent);margin:0 -4px;padding:10px 4px;border-radius:10px}
+  .cbundleitems{margin-top:6px;padding-left:8px;border-left:2px solid #4a3d20;display:flex;flex-direction:column}
+  .cbundleitems .citem{border-top:1px dashed var(--line);padding:8px 0}
+  .cbundleitems .citem:first-child{border-top:none}
   .citem .rm{color:var(--red);cursor:pointer;border:none;background:none;font-size:16px}
 
   /* 行事曆 */
@@ -300,6 +304,7 @@ let adGroups=[], myGroups=[]; // 目前渲染的預約分組（管理端 / 查�
 let expandedAcc={};        // 器材「附帶清單」展開狀態
 let adminCat='全部';       // 管理端器材清單的分類篩選
 let editBundleId=null, bundleSel={};  // 組合包編輯：id、勾選的器材({id:數量})
+let cartBundleExpanded={};            // 購物車內組合包展開狀態
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -493,20 +498,26 @@ function dismissOnboard(){localStorage.setItem('gear_onboard_dismissed','1');ren
 function bundleSection(){
   const list=(DATA.bundles||[]).filter(b=>b['狀態']!=='停用');
   if(!list.length) return '';
+  const MINOR_CATS=['電源','配件'];  // 這些歸為「小配件」，預覽只列大品項
   const cards=list.map(b=>{
     let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
-    const names=items.map(it=>{const eq=DATA.equipment.find(x=>x.id===it['器材id']);return eq?eq['名稱']+(it['數量']>1?' ×'+it['數量']:''):null;}).filter(Boolean);
+    const withEq=items.map(it=>({eq:DATA.equipment.find(x=>x.id===it['器材id']),qty:it['數量']})).filter(x=>x.eq);
+    const major=withEq.filter(x=>MINOR_CATS.indexOf(x.eq['分類'])<0);
+    const minorCount=withEq.length-major.length;
+    const shown=(major.length?major:withEq); // 全是小配件時退回全列，避免空白
+    const names=shown.map(x=>x.eq['名稱']+(x.qty>1?' ×'+x.qty:'')).join('、');
     return `<div class="bcard">
       <div class="bt">🎁 ${b['名稱']}</div>
       ${b['說明']?`<div class="meta">${b['說明']}</div>`:''}
-      <div class="meta bnames">${names.join('、')}</div>
-      <button class="btn pri sm" onclick="addBundleToCart('${b.id}')">整組加入清單</button>
+      <div class="meta bnames">${names}${minorCount>0&&major.length?`　+${minorCount} 項配件`:''}</div>
+      <button class="btn pri sm" onclick="addBundleToCart('${b.id}','${b['名稱'].replace(/'/g,"\\'")}')">整組加入清單</button>
     </div>`;
   }).join('');
   return `<div class="sec-title" style="margin-top:4px">🎁 快速組合</div><div class="bwrap">${cards}</div>`;
 }
-function addBundleToCart(id){
+function addBundleToCart(id,bundleName){
   const b=(DATA.bundles||[]).find(x=>x.id===id); if(!b) return;
+  bundleName=bundleName||b['名稱'];
   let items=[]; try{items=JSON.parse(b['項目']||'[]');}catch(e){}
   let added=0, skipped=[];
   items.forEach(it=>{
@@ -517,6 +528,7 @@ function addBundleToCart(id){
     const next=cart[eq.id].數量+want;
     if(next>stock){cart[eq.id].數量=stock;skipped.push(eq['名稱']+'（庫存不足，已加到上限）');}
     else cart[eq.id].數量=next;
+    cart[eq.id].fromBundle=id; cart[eq.id].bundleName=bundleName;  // 標記來自同一個組合，購物車會收成一包
     added++;
   });
   saveCart(); render();
@@ -773,26 +785,51 @@ function openCart(){
   pf('ckName',me.name); pf('ckDept',me.dept); pf('ckMail',me.mail);
   renderCart(); openModal('cartModal');
 }
+function cartItemRow(c){
+  const e=DATA.equipment.find(x=>x.id===c.id);
+  const acc=e?accList(e['附帶']):[];
+  return `<div class="citem">
+    <div class="citemtop">
+      <div class="cn">${c.名稱}${acc.length?` <span class="accbadge">📋 ${acc.length}</span>`:''}<div class="meta">庫存 ${c.stock}</div></div>
+      <div class="step">
+        <button onclick="setQty('${c.id}',-1)">−</button>
+        <span class="qv">${c.數量}</span>
+        <button onclick="setQty('${c.id}',1)" ${c.數量>=c.stock?'disabled':''}>+</button>
+      </div>
+      <button class="rm" onclick="removeCart('${c.id}')">✕</button>
+    </div>
+    ${acc.length?`<div class="acclist">${acc.map(it=>`<label class="accitem"><input type="checkbox" checked>${it}</label>`).join('')}</div>`:''}
+  </div>`;
+}
+function removeBundleFromCart(bid){
+  Object.keys(cart).forEach(id=>{if(cart[id].fromBundle===bid) delete cart[id];});
+  saveCart(); renderCart(); updateCart(); render();
+}
+function toggleCartBundle(bid){cartBundleExpanded[bid]=!cartBundleExpanded[bid];renderCart();}
 function renderCart(){
   const el=document.getElementById('cartItems');
   const items=Object.values(cart);
   if(!items.length){el.innerHTML=`<div class="empty" style="padding:20px">清單是空的</div>`;return;}
-  el.innerHTML=items.map(c=>{
-    const e=DATA.equipment.find(x=>x.id===c.id);
-    const acc=e?accList(e['附帶']):[];
-    return `<div class="citem">
+  const bundleGroups={}, standalone=[];
+  items.forEach(c=>{
+    if(c.fromBundle){(bundleGroups[c.fromBundle]=bundleGroups[c.fromBundle]||{name:c.bundleName,items:[]}).items.push(c);}
+    else standalone.push(c);
+  });
+  let html='';
+  Object.keys(bundleGroups).forEach(bid=>{
+    const g=bundleGroups[bid], open=cartBundleExpanded[bid];
+    const totalQty=g.items.reduce((s,c)=>s+c.數量,0);
+    html+=`<div class="citem cbundle">
       <div class="citemtop">
-        <div class="cn">${c.名稱}${acc.length?` <span class="accbadge">📋 ${acc.length}</span>`:''}<div class="meta">庫存 ${c.stock}</div></div>
-        <div class="step">
-          <button onclick="setQty('${c.id}',-1)">−</button>
-          <span class="qv">${c.數量}</span>
-          <button onclick="setQty('${c.id}',1)" ${c.數量>=c.stock?'disabled':''}>+</button>
-        </div>
-        <button class="rm" onclick="removeCart('${c.id}')">✕</button>
+        <span class="caret ${open?'open':''}" onclick="toggleCartBundle('${bid}')">▶</span>
+        <div class="cn" onclick="toggleCartBundle('${bid}')" style="cursor:pointer">🎁 ${g.name}<div class="meta">${g.items.length} 項器材 · 共 ${totalQty} 件</div></div>
+        <button class="rm" onclick="removeBundleFromCart('${bid}')">✕</button>
       </div>
-      ${acc.length?`<div class="acclist">${acc.map(it=>`<label class="accitem"><input type="checkbox" checked>${it}</label>`).join('')}</div>`:''}
+      ${open?`<div class="cbundleitems">${g.items.map(cartItemRow).join('')}</div>`:''}
     </div>`;
-  }).join('');
+  });
+  html+=standalone.map(cartItemRow).join('');
+  el.innerHTML=html;
 }
 
 document.getElementById('ckSubmit').onclick=async()=>{
