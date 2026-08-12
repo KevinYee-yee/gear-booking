@@ -113,8 +113,9 @@
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .modal .actions{display:flex;gap:10px;margin-top:18px}
   .modal .actions .btn{flex:1;justify-content:center;text-align:center}
-  .citem{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .citem{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
   .citem:first-child{border-top:none}
+  .citemtop{display:flex;align-items:center;gap:10px}
   .citem .cn{flex:1;font-size:14px}
   .citem .rm{color:var(--red);cursor:pointer;border:none;background:none;font-size:16px}
 
@@ -308,7 +309,7 @@ const accBadge=e=>accCount(e)?`<span class="accbadge">📋 ${accCount(e)} 件配
 function toggleAcc(id){expandedAcc[id]=!expandedAcc[id];render();}
 function accChecklist(e){
   const items=accList(e['附帶']); if(!items.length) return '';
-  return `<div class="acclist">${items.map(it=>`<label class="accitem"><input type="checkbox">${it}</label>`).join('')}</div>`;
+  return `<div class="acclist">${items.map(it=>`<label class="accitem"><input type="checkbox" checked>${it}</label>`).join('')}</div>`;
 }
 
 // ---- 分群 ----
@@ -626,14 +627,22 @@ function renderCart(){
   const el=document.getElementById('cartItems');
   const items=Object.values(cart);
   if(!items.length){el.innerHTML=`<div class="empty" style="padding:20px">清單是空的</div>`;return;}
-  el.innerHTML=items.map(c=>`
-    <div class="citem"><div class="cn">${c.名稱}<div class="meta">庫存 ${c.stock}</div></div>
-      <div class="step">
-        <button onclick="setQty('${c.id}',-1)">−</button>
-        <span class="qv">${c.數量}</span>
-        <button onclick="setQty('${c.id}',1)" ${c.數量>=c.stock?'disabled':''}>+</button>
+  el.innerHTML=items.map(c=>{
+    const e=DATA.equipment.find(x=>x.id===c.id);
+    const acc=e?accList(e['附帶']):[];
+    return `<div class="citem">
+      <div class="citemtop">
+        <div class="cn">${c.名稱}${acc.length?` <span class="accbadge">📋 ${acc.length}</span>`:''}<div class="meta">庫存 ${c.stock}</div></div>
+        <div class="step">
+          <button onclick="setQty('${c.id}',-1)">−</button>
+          <span class="qv">${c.數量}</span>
+          <button onclick="setQty('${c.id}',1)" ${c.數量>=c.stock?'disabled':''}>+</button>
+        </div>
+        <button class="rm" onclick="removeCart('${c.id}')">✕</button>
       </div>
-      <button class="rm" onclick="removeCart('${c.id}')">✕</button></div>`).join('');
+      ${acc.length?`<div class="acclist">${acc.map(it=>`<label class="accitem"><input type="checkbox" checked>${it}</label>`).join('')}</div>`:''}
+    </div>`;
+  }).join('');
 }
 
 document.getElementById('ckSubmit').onclick=async()=>{
