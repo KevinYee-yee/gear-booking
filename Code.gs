@@ -48,6 +48,7 @@ function handle(e) {
       case 'review':              out = apiReview(params); break;
       case 'review_batch':        out = apiReviewBatch(params); break;
       case 'return':              out = apiReturn(params); break;
+      case 'return_batch':        out = apiReturnBatch(params); break;
       case 'add_equipment':       out = apiAddEquipment(params); break;
       case 'update_equipment':    out = apiUpdateEquipment(params); break;
       case 'delete_equipment':    out = apiDeleteEquipment(params); break;
@@ -226,6 +227,21 @@ function apiReturn(p) {
   if (!r.row) return { ok: false, error: '找不到申請' };
   setCell(SHEET_RESV, r.row, '狀態', '已歸還');
   return { ok: true };
+}
+
+// ====== 批次歸還（管理端）======
+function apiReturnBatch(p) {
+  requireAdmin(p);
+  requireFields(p, ['ids']);
+  var ids = p['ids'];
+  if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (e) {} }
+  if (!ids || !ids.length) return { ok: false, error: '沒有項目' };
+  var n = 0;
+  for (var i = 0; i < ids.length; i++) {
+    var r = findRowById(SHEET_RESV, ids[i]);
+    if (r.row && r.data['狀態'] === '已核准') { setCell(SHEET_RESV, r.row, '狀態', '已歸還'); n++; }
+  }
+  return { ok: true, done: n };
 }
 
 // ====== 器材增刪改（管理端）======

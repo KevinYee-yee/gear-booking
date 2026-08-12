@@ -533,15 +533,16 @@ function renderAdmin(){
   const gHtml=groups.length?groups.map((g,idx)=>{
     const open=expandedResv['ad::'+g.key];
     const pend=grpPending(g);
-    const overdue=g.items.some(i=>i['狀態']==='已核准'&&String(i['歸還日'])<now);
+    const appr=g.items.filter(i=>i['狀態']==='已核准');
+    const overdue=appr.some(i=>String(i['歸還日'])<now);
     const title=g['用途']||`${grpBorrower(g)} 的借用`;
     const items=g.items.map(r=>{
-      const isPend=r['狀態']==='待審核';
-      const cb=isPend?`<input type="checkbox" class="chk_ad_${idx}" data-id="${r.id}" checked>`:`<span class="cbspace"></span>`;
-      const act=r['狀態']==='已核准'?`<button class="btn sm" onclick="markReturn('${r.id}')">登記歸還</button>`:'';
-      return `<div class="vrow">${cb}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}</span>${act}</div>`;
+      const st=r['狀態'], canChk=(st==='待審核'||st==='已核准');
+      const cb=canChk?`<input type="checkbox" class="chk_ad_${idx}" data-id="${r.id}" data-st="${st}" checked>`:`<span class="cbspace"></span>`;
+      const act=st==='已核准'?`<button class="btn sm" onclick="markReturn('${r.id}')">歸還</button>`:'';
+      return `<div class="vrow">${cb}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(st)}</span>${act}</div>`;
     }).join('');
-    const selBar=pend.length>1?`<div class="vrow selbar"><span class="meta">勾選你要的項目後：</span><button class="btn sm gd" onclick="reviewSelected(${idx},'approve')">批准勾選</button><button class="btn sm rd" onclick="reviewSelected(${idx},'reject')">拒絕勾選</button></div>`:'';
+    const selBar=(pend.length>1||appr.length>1)?`<div class="vrow selbar"><span class="meta">勾選項目後：</span>${pend.length?`<button class="btn sm gd" onclick="reviewSelected(${idx},'approve')">批准勾選</button><button class="btn sm rd" onclick="reviewSelected(${idx},'reject')">拒絕勾選</button>`:''}${appr.length?`<button class="btn sm" onclick="returnSelected(${idx})">歸還勾選</button>`:''}</div>`:'';
     return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'ad')">▶</span>
@@ -549,6 +550,7 @@ function renderAdmin(){
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span>${overdue?' <span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
           <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''} ｜ ${statusSummary(g.items)}</div></div>
         ${pend.length?`<button class="btn sm gd" onclick="approveAll(${idx})">全部批准</button><button class="btn sm rd" onclick="rejectAll(${idx})">全部拒絕</button>`:''}
+        ${appr.length?`<button class="btn sm" onclick="returnAll(${idx})">全部歸還</button>`:''}
       </div>
       ${open?`<div class="variants">${items}${selBar}</div>`:''}
     </div>`;
@@ -687,11 +689,29 @@ function rejectAll(idx){
   doReview(ids,'reject',note);
 }
 function reviewSelected(idx,decision){
-  const ids=[...document.querySelectorAll('.chk_ad_'+idx+':checked')].map(b=>b.dataset.id);
-  if(!ids.length) return toast('沒有勾選任何項目','err');
+  const ids=[...document.querySelectorAll('.chk_ad_'+idx+':checked')].filter(b=>b.dataset.st==='待審核').map(b=>b.dataset.id);
+  if(!ids.length) return toast('沒有勾選待審核的項目','err');
   if(decision==='reject'){const note=prompt(`拒絕勾選的 ${ids.length} 項，原因（可留空）：`); if(note===null) return; return doReview(ids,'reject',note);}
   if(!confirm(`批准勾選的 ${ids.length} 項？`)) return;
   doReview(ids,'approve');
+}
+function returnAll(idx){
+  const g=adGroups[idx]; if(!g) return;
+  const ids=g.items.filter(i=>i['狀態']==='已核准').map(i=>i.id); if(!ids.length) return;
+  if(!confirm(`全部歸還「${g['用途']||grpBorrower(g)}」的 ${ids.length} 項？`)) return;
+  doReturn(ids);
+}
+function returnSelected(idx){
+  const ids=[...document.querySelectorAll('.chk_ad_'+idx+':checked')].filter(b=>b.dataset.st==='已核准').map(b=>b.dataset.id);
+  if(!ids.length) return toast('沒有勾選已核准（借出中）的項目','err');
+  if(!confirm(`登記歸還勾選的 ${ids.length} 項？`)) return;
+  doReturn(ids);
+}
+async function doReturn(ids){
+  if(!ids.length) return;
+  toast('登記歸還中…');
+  const r=await api('return_batch',{ids,pin:ADMIN_PIN},true);
+  r.ok?(toast(`已歸還 ${r.done} 項`,'ok'),load()):toast(r.error||'失敗','err');
 }
 async function markReturn(id){if(!confirm('確認此器材已歸還？'))return;const r=await api('return',{id,pin:ADMIN_PIN},true);r.ok?(toast('已登記歸還','ok'),load()):toast(r.error,'err');}
 
