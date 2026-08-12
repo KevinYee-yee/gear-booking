@@ -292,6 +292,7 @@ let DATA={equipment:[],reservations:[],bundles:[]};
 let VIEW='inventory';
 let ADMIN_PIN=sessionStorage.getItem('gear_pin')||'';
 let filterCat='全部', searchQ='';
+let sortMode=localStorage.getItem('gear_sort')||'default'; // default | freq_desc | freq_asc | name_asc | name_desc
 let viewMode=localStorage.getItem('gear_viewmode')||'card';
 let expanded={};           // 器材群組展開狀態
 let expandedResv={};       // 預約專案卡展開狀態
@@ -322,7 +323,7 @@ async function load(){
   try{
     const r=await api('list');
     if(!r.ok) throw new Error(r.error||'讀取失敗');
-    DATA=r; reconcileCart(); render();
+    DATA=r; borrowCountCache=null; reconcileCart(); render();
   }catch(e){
     document.getElementById('app').innerHTML=`<div class="empty">⚠️ ${e.message}</div>`;
   }
@@ -349,6 +350,27 @@ function badge(s){
   return `<span class="badge ${m[s]||'b-fix'}"><span class="dot"></span>${s}</span>`;
 }
 const bookable=eq=>eq['狀態']==='可借用';
+
+// ---- 借用次數（依已核准/已歸還的預約統計，愈常借愈熱門）----
+let borrowCountCache=null;
+function borrowCount(id){
+  if(!borrowCountCache){
+    borrowCountCache={};
+    DATA.reservations.forEach(r=>{
+      if(r['狀態']==='已核准'||r['狀態']==='已歸還') borrowCountCache[r['器材id']]=(borrowCountCache[r['器材id']]||0)+1;
+    });
+  }
+  return borrowCountCache[id]||0;
+}
+function sortItems(items){
+  const arr=[...items];
+  if(sortMode==='name_asc') arr.sort((a,b)=>String(a['名稱']).localeCompare(String(b['名稱']),'zh-Hant'));
+  else if(sortMode==='name_desc') arr.sort((a,b)=>String(b['名稱']).localeCompare(String(a['名稱']),'zh-Hant'));
+  else if(sortMode==='freq_desc') arr.sort((a,b)=>borrowCount(b.id)-borrowCount(a.id));
+  else if(sortMode==='freq_asc') arr.sort((a,b)=>borrowCount(a.id)-borrowCount(b.id));
+  return arr;
+}
+function setSort(v){sortMode=v;localStorage.setItem('gear_sort',v);render();}
 
 // ---- 分類配色 + 配圖 ----
 const CATMETA={
@@ -423,21 +445,24 @@ function renderInventory(){
     const okQ=!q||(e['名稱']+e['型號']+e['分類']+e['序號']+(e['群組']||'')+(e['備註']||'')+(e['附帶']||'')).toLowerCase().includes(q);
     return okCat&&okQ;
   });
-  const units=buildUnits(items);
+  const sorted=sortItems(items);
+  const units=buildUnits(sorted);
   const chips=cats.map(c=>{
     const on=c===filterCat, s=c==='全部'?{c:'var(--accent)',e:'🗂'}:catStyle(c);
     return `<div class="fchip ${on?'on':''}" style="${on?`border-color:${s.c};color:${s.c}`:''}" onclick="setCat('${c}')">${c==='全部'?'🗂 全部':s.e+' '+c}</div>`;
   }).join('');
   let body;
-  if(!items.length) body=`<div class="empty">沒有符合的器材</div>`;
-  else if(viewMode==='calendar') body=calendarView(items);
+  if(!sorted.length) body=`<div class="empty">沒有符合的器材</div>`;
+  else if(viewMode==='calendar') body=calendarView(sorted);
   else if(viewMode==='list') body=listView(units);
   else body=cardView(units);
+  const sortOpts=[['default','預設順序'],['freq_desc','常借次數 ↓'],['freq_asc','常借次數 ↑'],['name_asc','字母 A→Z'],['name_desc','字母 Z→A']];
   return `
     ${onboardBanner()}
     ${bundleSection()}
     <div class="toolbar">
       <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 用途 / 配件…" value="${searchQ}">
+      <select id="sortSel" onchange="setSort(this.value)">${sortOpts.map(([v,l])=>`<option value="${v}" ${sortMode===v?'selected':''}>${l}</option>`).join('')}</select>
       <div class="vtoggle">
         <button class="${viewMode==='card'?'on':''}" onclick="setView('card')">▦ 卡片</button>
         <button class="${viewMode==='list'?'on':''}" onclick="setView('list')">☰ 列表</button>
