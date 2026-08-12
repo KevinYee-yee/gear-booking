@@ -52,6 +52,10 @@
   .lico{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
   .cattag{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
   .accbadge{font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .photozone{border:1px dashed var(--line);border-radius:10px;min-height:90px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;background:var(--panel2)}
+  .photozone:hover{border-color:var(--accent)}
+  .photohint{color:var(--sub);font-size:13px;text-align:center;padding:16px;line-height:1.7}
+  .photoprev{max-width:100%;max-height:180px;object-fit:contain;display:block}
   .acclist{display:flex;flex-direction:column;gap:6px;margin-top:4px;background:var(--panel2);border-radius:8px;padding:8px 10px}
   .accitem{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
   .accitem input{width:16px;height:16px;accent-color:var(--accent)}
@@ -214,7 +218,17 @@
       <div class="field"><label>序號</label><input id="emSerial"></div>
       <div class="field"><label>狀態</label><select id="emStatus"><option>可借用</option><option>維修中</option><option>報廢</option></select></div>
     </div>
-    <div class="field"><label>照片網址</label><input id="emPhoto" placeholder="https://…"></div>
+    <div class="field"><label>照片（點下方選檔，或直接 ⌘/Ctrl+V 貼上截圖）</label>
+      <div class="photozone" id="emPhotoZone">
+        <img id="emPhotoPrev" class="photoprev hide" alt="">
+        <div class="photohint" id="emPhotoHint">📷 點此選圖片檔<br>或直接貼上截圖（⌘/Ctrl+V）</div>
+      </div>
+      <input type="file" id="emFile" accept="image/*" class="hide">
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="emPhoto" placeholder="或貼圖片網址 https://…" style="flex:1" oninput="updatePhotoPreview()">
+        <button type="button" class="btn sm" onclick="clearPhoto()">清除</button>
+      </div>
+    </div>
     <div class="field"><label>備註（純文字說明）</label><input id="emNote" placeholder="例：油壓雲台、公司主力機身…"></div>
     <div class="field"><label>附帶器材（一行一項，或用「、」分隔；借還可勾選清點）</label>
       <textarea id="emAcc" rows="3" placeholder="機身&#10;電池 ×5&#10;充電器 ×3&#10;相機袋"></textarea></div>
@@ -724,6 +738,34 @@ async function doReturn(ids){
 }
 async function markReturn(id){if(!confirm('確認此器材已歸還？'))return;const r=await api('return',{id,pin:ADMIN_PIN},true);r.ok?(toast('已登記歸還','ok'),load()):toast(r.error,'err');}
 
+// ---- 照片上傳（自動壓縮成內嵌縮圖）----
+function updatePhotoPreview(){
+  const v=document.getElementById('emPhoto').value.trim();
+  const p=document.getElementById('emPhotoPrev'), h=document.getElementById('emPhotoHint');
+  if(v){p.src=v;p.classList.remove('hide');h.classList.add('hide');}
+  else{p.classList.add('hide');h.classList.remove('hide');}
+}
+function clearPhoto(){document.getElementById('emPhoto').value='';document.getElementById('emFile').value='';updatePhotoPreview();}
+function processImage(file){
+  if(!file||!file.type.startsWith('image/')) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const img=new Image();
+    img.onload=()=>{
+      const shrink=(max,q)=>{let w=img.width,h=img.height;const s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);return cv.toDataURL('image/jpeg',q);};
+      let uri=shrink(320,0.72), q=0.72;
+      while(uri.length>45000&&q>0.35){q-=0.1;uri=shrink(320,q);}
+      if(uri.length>45000) uri=shrink(240,0.6);
+      document.getElementById('emPhoto').value=uri;
+      updatePhotoPreview();
+      toast('圖片已載入','ok');
+    };
+    img.src=ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function openEquip(id){
   editEquipId=id;
   const e=id?DATA.equipment.find(x=>x.id===id):{};
@@ -737,6 +779,8 @@ function openEquip(id){
   document.getElementById('emQty').value=Number(e['數量'])||1;
   document.getElementById('emStatus').value=e['狀態']||'可借用';
   document.getElementById('emDelete').style.display=id?'block':'none';
+  document.getElementById('emFile').value='';
+  updatePhotoPreview();
   openModal('equipModal');
 }
 document.getElementById('emSave').onclick=async()=>{
@@ -759,6 +803,13 @@ function closeModal(id){document.getElementById(id).classList.remove('on');}
 let toastT;
 function toast(m,t=''){const el=document.getElementById('toast');el.textContent=m;el.className='toast on '+t;clearTimeout(toastT);toastT=setTimeout(()=>el.className='toast',2600);}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('on');}));
+document.getElementById('emPhotoZone').addEventListener('click',()=>document.getElementById('emFile').click());
+document.getElementById('emFile').addEventListener('change',e=>{if(e.target.files[0])processImage(e.target.files[0]);});
+document.addEventListener('paste',e=>{
+  if(!document.getElementById('equipModal').classList.contains('on'))return;
+  const items=(e.clipboardData&&e.clipboardData.items)||[];
+  for(const it of items){if(it.type&&it.type.startsWith('image/')){const f=it.getAsFile();if(f){processImage(f);e.preventDefault();}break;}}
+});
 document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset.view){VIEW=e.target.dataset.view;render();}});
 
 load();
