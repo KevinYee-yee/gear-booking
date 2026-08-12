@@ -194,7 +194,7 @@ function apiAddEquipment(p) {
   sh.appendRow([
     id, p['名稱'], p['分類'] || '', p['型號'] || '', p['序號'] || '',
     p['狀態'] || '可借用', p['照片網址'] || '', p['備註'] || '',
-    p['群組'] || '', Number(p['數量']) || 1
+    p['群組'] || '', Number(p['數量']) || 1, p['附帶'] || ''
   ]);
   return { ok: true, id: id };
 }
@@ -204,7 +204,7 @@ function apiUpdateEquipment(p) {
   requireFields(p, ['id']);
   var r = findRowById(SHEET_EQUIP, p['id']);
   if (!r.row) return { ok: false, error: '找不到器材' };
-  ['名稱','分類','型號','序號','狀態','照片網址','備註','群組','數量'].forEach(function (col) {
+  ['名稱','分類','型號','序號','狀態','照片網址','備註','群組','數量','附帶'].forEach(function (col) {
     if (p[col] != null) setCell(SHEET_EQUIP, r.row, col, p[col]);
   });
   return { ok: true };
@@ -336,7 +336,7 @@ function setupSheets() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var eq = ss.getSheetByName(SHEET_EQUIP) || ss.insertSheet(SHEET_EQUIP);
   eq.clear();
-  eq.appendRow(['id','名稱','分類','型號','序號','狀態','照片網址','備註','群組','數量']);
+  eq.appendRow(['id','名稱','分類','型號','序號','狀態','照片網址','備註','群組','數量','附帶']);
   eq.setFrozenRows(1);
 
   var rv = ss.getSheetByName(SHEET_RESV) || ss.insertSheet(SHEET_RESV);
@@ -346,14 +346,34 @@ function setupSheets() {
 }
 
 /**
- * 非破壞性升級：只在「預約」表補上缺少的「批次」欄，不刪任何資料、不動器材表。
- * 已經有資料、不想重跑 setupSheets 時用這個。
+ * 非破壞性升級（可重複執行）：
+ *  1) 預約表補「批次」欄
+ *  2) 器材表補「附帶」欄，並把看起來像配件清單的「備註」自動搬到「附帶」
+ *     （判斷：備註含 、 × ＋ 這類清單符號才搬；純文字備註如「油壓雲台」「單獨」保留）
+ * 不刪資料。
  */
 function upgradeSchema() {
-  var sh = sheet(SHEET_RESV);
-  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  if (headers.indexOf('批次') < 0) sh.getRange(1, sh.getLastColumn() + 1).setValue('批次');
-  Logger.log('預約表欄位：' + sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].join(','));
+  var rv = sheet(SHEET_RESV);
+  var rh = rv.getRange(1, 1, 1, rv.getLastColumn()).getValues()[0];
+  if (rh.indexOf('批次') < 0) rv.getRange(1, rv.getLastColumn() + 1).setValue('批次');
+
+  var eq = sheet(SHEET_EQUIP);
+  var eh = eq.getRange(1, 1, 1, eq.getLastColumn()).getValues()[0];
+  if (eh.indexOf('附帶') < 0) eq.getRange(1, eq.getLastColumn() + 1).setValue('附帶');
+  eh = eq.getRange(1, 1, 1, eq.getLastColumn()).getValues()[0];
+  var cNote = eh.indexOf('備註') + 1, cAcc = eh.indexOf('附帶') + 1;
+  var last = eq.getLastRow();
+  if (last > 1 && cNote > 0 && cAcc > 0) {
+    var notes = eq.getRange(2, cNote, last - 1, 1).getValues();
+    var accs  = eq.getRange(2, cAcc,  last - 1, 1).getValues();
+    for (var i = 0; i < notes.length; i++) {
+      var n = String(notes[i][0]);
+      if (!accs[i][0] && /[、×＋]/.test(n)) { accs[i][0] = n; notes[i][0] = ''; }
+    }
+    eq.getRange(2, cNote, last - 1, 1).setValues(notes);
+    eq.getRange(2, cAcc,  last - 1, 1).setValues(accs);
+  }
+  Logger.log('升級完成');
 }
 
 /**

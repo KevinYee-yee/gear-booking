@@ -45,6 +45,17 @@
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:8px}
   .card h3{margin:2px 0;font-size:16px}
+  .cardtop{display:flex;align-items:center;gap:10px}
+  .cico{width:40px;height:40px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto;overflow:hidden}
+  .cico img{width:100%;height:100%;object-fit:cover}
+  .cardtop h3{flex:1;min-width:0}
+  .lico{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
+  .cattag{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .accwrap{border-top:1px dashed var(--line);padding-top:8px;margin-top:2px}
+  .acchead{font-size:13px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px}
+  .acclist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .accitem{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+  .accitem input{width:16px;height:16px;accent-color:var(--accent)}
   .meta{font-size:13px;color:var(--sub);line-height:1.5}
   .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
   .b-ok{background:#16351f;color:#6ee7a0}.b-out{background:#3a2a12;color:#e0a83a}
@@ -204,7 +215,9 @@
       <div class="field"><label>狀態</label><select id="emStatus"><option>可借用</option><option>維修中</option><option>報廢</option></select></div>
     </div>
     <div class="field"><label>照片網址</label><input id="emPhoto" placeholder="https://…"></div>
-    <div class="field"><label>備註（配件內容）</label><input id="emNote"></div>
+    <div class="field"><label>備註（純文字說明）</label><input id="emNote" placeholder="例：油壓雲台、公司主力機身…"></div>
+    <div class="field"><label>附帶器材（一行一項，或用「、」分隔；借還可勾選清點）</label>
+      <textarea id="emAcc" rows="3" placeholder="機身&#10;電池 ×5&#10;充電器 ×3&#10;相機袋"></textarea></div>
     <div class="actions">
       <button class="btn rd" id="emDelete" style="flex:0 0 auto">刪除</button>
       <button class="btn" onclick="closeModal('equipModal')">取消</button>
@@ -227,6 +240,8 @@ let viewMode=localStorage.getItem('gear_viewmode')||'card';
 let expanded={};           // 器材群組展開狀態
 let expandedResv={};       // 預約專案卡展開狀態
 let adGroups=[], myGroups=[]; // 目前渲染的預約分組（管理端 / 查詢）
+let expandedAcc={};        // 器材「附帶清單」展開狀態
+let adminCat='全部';       // 管理端器材清單的分類篩選
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
@@ -277,6 +292,27 @@ function badge(s){
   return `<span class="badge ${m[s]||'b-fix'}"><span class="dot"></span>${s}</span>`;
 }
 const bookable=eq=>eq['狀態']==='可借用';
+
+// ---- 分類配色 + 配圖 ----
+const CATMETA={
+  '相機':{c:'#5b8def',e:'📷'},'鏡頭':{c:'#7c6cf0',e:'🔭'},'燈光':{c:'#e0a83a',e:'💡'},
+  '音訊':{c:'#e5674f',e:'🎙️'},'儲存':{c:'#4caf7f',e:'💾'},'電源':{c:'#e08a3a',e:'🔋'},
+  '腳架':{c:'#8a94a6',e:'🦵'},'穩定器':{c:'#48b1c9',e:'🎚️'},'配件':{c:'#b07cc9',e:'🧰'},'雜項':{c:'#9aa2b1',e:'📦'}
+};
+const catStyle=cat=>CATMETA[cat]||{c:'#9aa2b1',e:'📦'};
+const catTag=cat=>{const s=catStyle(cat);return `<span class="cattag" style="background:${s.c}22;color:${s.c}">${s.e} ${cat||'—'}</span>`;};
+
+// ---- 附帶器材清單（可勾選清點）----
+const accList=s=>String(s||'').split(/[、\n,，]/).map(x=>x.trim()).filter(Boolean);
+function toggleAcc(id){expandedAcc[id]=!expandedAcc[id];render();}
+function accBlock(e){
+  const items=accList(e['附帶']); if(!items.length) return '';
+  const open=expandedAcc[e.id];
+  return `<div class="accwrap">
+    <div class="acchead" onclick="toggleAcc('${e.id}')"><span class="caret ${open?'open':''}">▶</span>📋 內含 ${items.length} 件（可勾選清點）</div>
+    ${open?`<div class="acclist">${items.map(it=>`<label class="accitem"><input type="checkbox">${it}</label>`).join('')}</div>`:''}
+  </div>`;
+}
 
 // ---- 分群 ----
 function buildUnits(items){
@@ -333,7 +369,10 @@ function renderInventory(){
     return okCat&&okQ;
   });
   const units=buildUnits(items);
-  const chips=cats.map(c=>`<div class="fchip ${c===filterCat?'on':''}" onclick="setCat('${c}')">${c}</div>`).join('');
+  const chips=cats.map(c=>{
+    const on=c===filterCat, s=c==='全部'?{c:'var(--accent)',e:'🗂'}:catStyle(c);
+    return `<div class="fchip ${on?'on':''}" style="${on?`border-color:${s.c};color:${s.c}`:''}" onclick="setCat('${c}')">${c==='全部'?'🗂 全部':s.e+' '+c}</div>`;
+  }).join('');
   let body;
   if(!items.length) body=`<div class="empty">沒有符合的器材</div>`;
   else if(viewMode==='calendar') body=calendarView(items);
@@ -361,19 +400,24 @@ function addBtn(eq){
 function cardView(units){
   return `<div class="grid">${units.map(u=>{
     if(u.type==='single'){
-      const e=u.item;
-      return `<div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px"><h3>${e['名稱']}</h3>${liveBadge(e)}</div>
-        <div class="meta">${[e['分類'],e['型號']].filter(Boolean).join(' · ')||'—'}${e['備註']?`<br>${e['備註']}`:''}${(Number(e['數量'])||1)>1?`<br>庫存 ${e['數量']}`:''}</div>
+      const e=u.item, s=catStyle(e['分類']);
+      const ico=e['照片網址']?`<img src="${e['照片網址']}" alt="">`:s.e;
+      return `<div class="card" style="border-left:3px solid ${s.c}">
+        <div class="cardtop"><div class="cico" style="background:${s.c}22">${ico}</div>
+          <h3>${e['名稱']}</h3>${liveBadge(e)}</div>
+        <div class="meta">${catTag(e['分類'])}${e['型號']?' · '+e['型號']:''}${(Number(e['數量'])||1)>1?' · 庫存 '+e['數量']:''}</div>
+        ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
+        ${accBlock(e)}
         <div style="flex:1"></div>${addBtn(e)}</div>`;
     }
-    const open=expanded[u.name];
-    return `<div class="card">
+    const open=expanded[u.name], s=catStyle(u.cat);
+    return `<div class="card" style="border-left:3px solid ${s.c}">
       <div class="grpline" onclick="toggleGroup('${u.name}')">
         <span class="caret ${open?'open':''}">▶</span>
+        <div class="cico" style="background:${s.c}22">${s.e}</div>
         <h3 style="flex:1">${u.name}</h3><span class="cat-tag">${u.items.length} 種</span>
       </div>
-      <div class="meta">${u.cat} · 點開選規格</div>
+      <div class="meta">${catTag(u.cat)} · 點開選規格</div>
       ${open?`<div class="variants">${u.items.map(e=>`
         <div class="vrow"><span class="vn">${e['名稱']} ${liveBadge(e)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
     </div>`;
@@ -384,14 +428,16 @@ function listView(units){
   let rows='';
   units.forEach(u=>{
     if(u.type==='single'){
-      const e=u.item;
-      rows+=`<div class="lrow"><div class="nm"><div class="t">${e['名稱']}</div><div class="meta">${e['備註']||''}</div></div>
-        <span class="cat-tag">${e['分類']||'—'}</span>${liveBadge(e)}${addBtn(e)}</div>`;
+      const e=u.item, s=catStyle(e['分類']);
+      rows+=`<div class="lrow" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="lico">${s.e}</span>
+        <div class="nm"><div class="t">${e['名稱']}</div><div class="meta">${e['備註']||''}</div></div>
+        ${catTag(e['分類'])}${liveBadge(e)}${addBtn(e)}</div>`;
     }else{
-      const open=expanded[u.name];
-      rows+=`<div class="lrow"><span class="caret ${open?'open':''}" onclick="toggleGroup('${u.name}')">▶</span>
+      const open=expanded[u.name], s=catStyle(u.cat);
+      rows+=`<div class="lrow" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="caret ${open?'open':''}" onclick="toggleGroup('${u.name}')">▶</span>
+        <span class="lico">${s.e}</span>
         <div class="nm" onclick="toggleGroup('${u.name}')" style="cursor:pointer"><div class="t">${u.name}</div><div class="meta">${u.items.length} 種規格</div></div>
-        <span class="cat-tag">${u.cat}</span></div>`;
+        ${catTag(u.cat)}</div>`;
       if(open) u.items.forEach(e=>{
         rows+=`<div class="lrow sub"><div class="nm"><div class="t" style="font-weight:500">${e['名稱']}</div></div>${liveBadge(e)}${addBtn(e)}</div>`;
       });
@@ -507,18 +553,25 @@ function renderAdmin(){
       ${open?`<div class="variants">${items}${selBar}</div>`:''}
     </div>`;
   }).join(''):`<div class="empty">沒有進行中的預約</div>`;
-  const eHtml=DATA.equipment.map(e=>`
-    <div class="item"><div class="grow"><div class="t">${e['名稱']} ${(Number(e['數量'])||1)>1?`<span class="cat-tag">×${e['數量']}</span>`:''} ${liveBadge(e)}</div>
-      <div class="meta">${[e['分類'],e['群組']?'群組:'+e['群組']:'',e['型號']].filter(Boolean).join(' · ')||'—'}</div></div>
-      <button class="btn sm" onclick="openEquip('${e.id}')">編輯</button></div>`).join('');
+  const adCats=['全部',...new Set(DATA.equipment.map(e=>e['分類']).filter(Boolean))];
+  const adChips=adCats.map(c=>{const on=c===adminCat,s=c==='全部'?{c:'var(--accent)',e:'🗂'}:catStyle(c);
+    return `<div class="fchip ${on?'on':''}" style="${on?`border-color:${s.c};color:${s.c}`:''}" onclick="setAdminCat('${c}')">${c==='全部'?'🗂 全部':s.e+' '+c}</div>`;}).join('');
+  const adEquip=DATA.equipment.filter(e=>adminCat==='全部'||e['分類']===adminCat);
+  const eHtml=adEquip.map(e=>{const s=catStyle(e['分類']);return `
+    <div class="item" style="box-shadow:inset 3px 0 0 ${s.c}"><div class="grow"><div class="t">${s.e} ${e['名稱']} ${(Number(e['數量'])||1)>1?`<span class="cat-tag">×${e['數量']}</span>`:''} ${liveBadge(e)}</div>
+      <div class="meta">${[e['分類'],e['群組']?'群組:'+e['群組']:'',e['型號']].filter(Boolean).join(' · ')||'—'}${e['附帶']?` · 內含 ${accList(e['附帶']).length} 件`:''}</div></div>
+      <button class="btn sm" onclick="openEquip('${e.id}')">編輯</button></div>`;}).join('');
   return `
     <div class="sec-title">預約 / 借用 ${pendingTotal?`<span class="count">${pendingTotal} 待審</span>`:''}</div><div class="rowlist">${gHtml}</div>
-    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>器材清單（${DATA.equipment.length}）</span>
-      <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button></div><div class="rowlist">${eHtml}</div>`;
+    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>器材清單（${adEquip.length}/${DATA.equipment.length}）</span>
+      <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button></div>
+    <div class="pill-filter">${adChips}</div>
+    <div class="rowlist">${eHtml}</div>`;
 }
 
 // ---- 互動 ----
 function setCat(c){filterCat=c;render();}
+function setAdminCat(c){adminCat=c;render();}
 function setView(v){viewMode=v;localStorage.setItem('gear_viewmode',v);render();}
 function toggleGroup(n){expanded[n]=!expanded[n];render();}
 
@@ -650,7 +703,7 @@ function openEquip(id){
   document.getElementById('grpList').innerHTML=uniq('群組').map(g=>`<option value="${g}">`).join('');
   document.getElementById('emTitle').textContent=id?'編輯器材':'新增器材';
   const g=(k,v)=>document.getElementById(k).value=e[v]||'';
-  g('emName','名稱');g('emCat','分類');g('emModel','型號');g('emSerial','序號');g('emPhoto','照片網址');g('emNote','備註');g('emGroup','群組');
+  g('emName','名稱');g('emCat','分類');g('emModel','型號');g('emSerial','序號');g('emPhoto','照片網址');g('emNote','備註');g('emGroup','群組');g('emAcc','附帶');
   document.getElementById('emQty').value=Number(e['數量'])||1;
   document.getElementById('emStatus').value=e['狀態']||'可借用';
   document.getElementById('emDelete').style.display=id?'block':'none';
@@ -662,6 +715,7 @@ document.getElementById('emSave').onclick=async()=>{
     型號:document.getElementById('emModel').value.trim(),序號:document.getElementById('emSerial').value.trim(),
     狀態:document.getElementById('emStatus').value,照片網址:document.getElementById('emPhoto').value.trim(),
     備註:document.getElementById('emNote').value.trim(),群組:document.getElementById('emGroup').value.trim(),
+    附帶:document.getElementById('emAcc').value.trim(),
     數量:Number(document.getElementById('emQty').value)||1};
   if(!p.名稱) return toast('請填寫名稱','err');
   const r=editEquipId?await api('update_equipment',{id:editEquipId,...p},true):await api('add_equipment',p,true);
