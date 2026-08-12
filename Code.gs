@@ -436,6 +436,42 @@ function upgradeSchema() {
 }
 
 /**
+ * 一次性：把所有「相機」拆成機身（清空附帶），並將電池/相機袋/充電器等
+ * 配件建成獨立可借器材（電源/配件/腳架…）。可重複執行，同名已存在會略過。
+ * 在編輯器執行即可，不需重新部署。
+ */
+function splitCameraKits() {
+  var eq = sheet(SHEET_EQUIP);
+  var values = eq.getDataRange().getValues();
+  var h = values[0];
+  var cName = h.indexOf('名稱'), cCat = h.indexOf('分類'), cAcc = h.indexOf('附帶');
+
+  // 1) 清空所有相機的附帶
+  for (var i = 1; i < values.length; i++) {
+    if (values[i][cCat] === '相機') eq.getRange(i + 1, cAcc + 1).setValue('');
+  }
+
+  // 2) 建立獨立配件（名稱, 分類, 數量）
+  var add = [
+    ['Sony 電池 NP-FZ100', '電源', 5], ['Sony 充電器', '電源', 3], ['Sony 相機袋', '配件', 1],
+    ['Canon 電池', '電源', 4], ['Canon 假電池', '電源', 1], ['Canon 充電器', '電源', 3], ['Canon 相機袋', '配件', 1],
+    ['小相機 電池', '電源', 2], ['小相機 充電器', '電源', 1], ['小相機 備用電池(非原廠)', '電源', 1],
+    ['GoPro 腳架', '腳架', 1], ['GoPro 充電器', '電源', 1], ['GoPro 兔籠', '配件', 1],
+    ['Pocket3 轉接底座', '配件', 1], ['Pocket3 充電柄', '電源', 1], ['Pocket3 小腳架', '腳架', 1],
+    ['Pocket3 原廠袋', '配件', 1], ['Pocket3 mic', '音訊', 1]
+  ];
+  var existing = {};
+  for (var j = 1; j < values.length; j++) existing[values[j][cName]] = true;
+
+  add.forEach(function (a) {
+    if (existing[a[0]]) return;
+    var id = 'E' + new Date().getTime() + Math.floor(Math.random() * 1000);
+    eq.appendRow([id, a[0], a[1], '', '', '可借用', '', '', '', a[2], '']);
+  });
+  Logger.log('相機已拆成機身，配件已獨立');
+}
+
+/**
  * 一鍵匯入真實器材清單（新 schema，含 群組/數量）。
  * 會清空「器材」表舊資料（保留標題列）並重寫。不影響「預約」表。
  * 每筆：[名稱, 分類, 型號, 序號, 狀態, 照片網址, 備註, 群組, 數量]
