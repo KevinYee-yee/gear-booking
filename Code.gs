@@ -50,6 +50,7 @@ function handle(e) {
       case 'create_reservation':  out = apiCreateReservation(params); break;
       case 'create_reservations': out = apiCreateReservations(params); break; // 購物車批次
       case 'cancel_reservation':  out = apiCancelReservation(params); break;
+      case 'edit_project':        out = apiEditProject(params); break;
       case 'review':              out = apiReview(params); break;
       case 'review_batch':        out = apiReviewBatch(params); break;
       case 'return':              out = apiReturn(params); break;
@@ -176,6 +177,86 @@ function apiCancelReservation(p) {
     return { ok: false, error: '此申請已結束，無法取消' };
   }
   setCell(SHEET_RESV, r.row, '狀態', '已取消');
+  return { ok: true };
+}
+
+// ====== 調整已送出的專案（公開：申請人自己或管理員都可用）======
+// 傳入該專案目前所有有效項目的 id（oldIds）與調整後的完整器材清單（items），
+// 以及新的借出/歸還時間。保留的項目更新數量並退回待審核；被移除的項目標記已取消；
+// 新增的項目建立新申請。全部完成後整個專案回到待審核，通知管理員重新審核。
+function apiEditProject(p) {
+  requireFields(p, ['oldIds', 'items', '借出日', '歸還日']);
+  var oldIds = p['oldIds'];
+  if (typeof oldIds === 'string') { try { oldIds = JSON.parse(oldIds); } catch (e) {} }
+  var items = p['items'];
+  if (typeof items === 'string') { try { items = JSON.parse(items); } catch (e) {} }
+  if (!oldIds || !oldIds.length) return { ok: false, error: '找不到原始項目' };
+  if (p['借出日'] >= p['歸還日']) return { ok: false, error: '歸還時間需晚於借出時間' };
+
+  var oldRows = oldIds.map(function (id) { return findRowById(SHEET_RESV, id); }).filter(function (r) { return r.row; });
+  var liveOld = oldRows.filter(function (r) { return r.data['狀態'] === '待審核' || r.data['狀態'] === '已核准'; });
+  if (!liveOld.length) return { ok: false, error: '這些項目已結束，無法調整' };
+  var base = liveOld[0].data;
+
+  // 驗證新清單各項是否有足夠庫存（排除這個專案本身原先佔用的量）
+  var oldIdSet = {};
+  oldIds.forEach(function (id) { oldIdSet[id] = true; });
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i];
+    var equip = findRowById(SHEET_EQUIP, it['器材id']);
+    if (!equip.row) return { ok: false, error: '找不到器材：' + it['器材id'] };
+    if (equip.data['狀態'] !== '可借用') return { ok: false, error: equip.data['名稱'] + '：目前無法借用' };
+    var stock = Number(equip.data['數量']) || 1;
+    var used = 0;
+    var rows = readSheet(SHEET_RESV);
+    for (var j = 0; j < rows.length; j++) {
+      var x = rows[j];
+      if (x['器材id'] !== it['器材id']) continue;
+      if (oldIdSet[x['id']]) continue; // 排除自己這個專案原本的佔用
+      if (x['狀態'] !== '已核准') continue;
+      if (p['借出日'] < x['歸還日'] && p['歸還日'] > x['借出日']) used += (Number(x['數量']) || 1);
+    }
+    var want = Number(it['數量']) || 1;
+    if (want > stock - used) {
+      return { ok: false, error: equip.data['名稱'] + '：該時段僅剩 ' + (stock - used) + ' 份，無法調整為 ' + want };
+    }
+  }
+
+  var keep = {};
+  items.forEach(function (it) { keep[it['器材id']] = it; });
+
+  // 原本項目：新清單還要 → 更新數量/日期並退回待審核；新清單不要了 → 標記已取消
+  var handled = {};
+  liveOld.forEach(function (r) {
+    var eid = r.data['器材id'];
+    if (keep[eid] && !handled[eid]) {
+      setCell(SHEET_RESV, r.row, '數量', keep[eid]['數量']);
+      setCell(SHEET_RESV, r.row, '借出日', p['借出日']);
+      setCell(SHEET_RESV, r.row, '歸還日', p['歸還日']);
+      setCell(SHEET_RESV, r.row, '狀態', '待審核');
+      setCell(SHEET_RESV, r.row, '審核備註', '');
+      handled[eid] = true;
+    } else {
+      setCell(SHEET_RESV, r.row, '狀態', '已取消');
+    }
+  });
+
+  // 新增的器材（原本沒有）→ 建立新申請
+  Object.keys(keep).forEach(function (eid) {
+    if (handled[eid]) return;
+    var equip = findRowById(SHEET_EQUIP, eid);
+    writeReservation(equip.data, {
+      借用人: base['借用人'], 部門: base['部門'], 聯絡方式: base['聯絡方式'],
+      借出日: p['借出日'], 歸還日: p['歸還日'], 用途: base['用途']
+    }, keep[eid]['數量'], base['批次']);
+  });
+
+  notify(getAdminEmail(),
+    '【器材預約】專案已調整，待重新審核：' + (base['用途'] || base['借用人']),
+    (base['用途'] || base['借用人']) + ' 調整了借用需求，請重新審核。\n\n' +
+    '借用人：' + base['借用人'] + '（' + base['部門'] + '）\n期間：' + p['借出日'] + ' ~ ' + p['歸還日'] + '\n\n' +
+    '前往審核：' + APP_URL);
+
   return { ok: true };
 }
 
