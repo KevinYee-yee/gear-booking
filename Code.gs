@@ -472,6 +472,35 @@ function splitCameraKits() {
 }
 
 /**
+ * 一次性：把 Pocket 兩台設成套裝。
+ * 移除先前 splitCameraKits 拆出的 Pocket3 獨立配件，並把配件寫回兩台 Pocket 的「附帶」。
+ * 在編輯器執行即可，不需重新部署。
+ */
+function fixPocketKits() {
+  var eq = sheet(SHEET_EQUIP);
+  var values = eq.getDataRange().getValues();
+  var h = values[0];
+  var cName = h.indexOf('名稱'), cAcc = h.indexOf('附帶');
+
+  // 刪掉拆出的 Pocket3 獨立配件（由下往上刪，避免列號位移）
+  var del = ['Pocket3 轉接底座', 'Pocket3 充電柄', 'Pocket3 小腳架', 'Pocket3 原廠袋', 'Pocket3 mic'];
+  for (var i = values.length - 1; i >= 1; i--) {
+    if (del.indexOf(values[i][cName]) >= 0) eq.deleteRow(i + 1);
+  }
+
+  // 設定兩台 Pocket 的附帶（整組借）
+  var acc = {
+    'DJI Pocket 3 全套': '轉接底座、充電柄、小腳架、原廠袋、Pocket mic',
+    'DJI Pocket 4 全套': '轉接底座、充電柄、小腳架、原廠袋、Pocket mic'
+  };
+  var v2 = eq.getDataRange().getValues();
+  for (var j = 1; j < v2.length; j++) {
+    if (acc[v2[j][cName]]) eq.getRange(j + 1, cAcc + 1).setValue(acc[v2[j][cName]]);
+  }
+  Logger.log('Pocket 兩台已設為套裝');
+}
+
+/**
  * 一鍵匯入真實器材清單（新 schema，含 群組/數量）。
  * 會清空「器材」表舊資料（保留標題列）並重寫。不影響「預約」表。
  * 每筆：[名稱, 分類, 型號, 序號, 狀態, 照片網址, 備註, 群組, 數量]

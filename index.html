@@ -51,9 +51,8 @@
   .cardtop h3{flex:1;min-width:0}
   .lico{font-size:18px;width:22px;text-align:center;flex:0 0 auto}
   .cattag{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;white-space:nowrap}
-  .accwrap{border-top:1px dashed var(--line);padding-top:8px;margin-top:2px}
-  .acchead{font-size:13px;color:var(--sub);cursor:pointer;display:flex;align-items:center;gap:6px}
-  .acclist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .accbadge{font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap}
+  .acclist{display:flex;flex-direction:column;gap:6px;margin-top:4px;background:var(--panel2);border-radius:8px;padding:8px 10px}
   .accitem{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
   .accitem input{width:16px;height:16px;accent-color:var(--accent)}
   .meta{font-size:13px;color:var(--sub);line-height:1.5}
@@ -304,14 +303,12 @@ const catTag=cat=>{const s=catStyle(cat);return `<span class="cattag" style="bac
 
 // ---- 附帶器材清單（可勾選清點）----
 const accList=s=>String(s||'').split(/[、\n,，]/).map(x=>x.trim()).filter(Boolean);
+const accCount=e=>accList(e['附帶']).length;
+const accBadge=e=>accCount(e)?`<span class="accbadge">📋 ${accCount(e)} 件配件 ${expandedAcc[e.id]?'▲':'▾'}</span>`:'';
 function toggleAcc(id){expandedAcc[id]=!expandedAcc[id];render();}
-function accBlock(e){
+function accChecklist(e){
   const items=accList(e['附帶']); if(!items.length) return '';
-  const open=expandedAcc[e.id];
-  return `<div class="accwrap">
-    <div class="acchead" onclick="toggleAcc('${e.id}')"><span class="caret ${open?'open':''}">▶</span>📋 內含 ${items.length} 件（可勾選清點）</div>
-    ${open?`<div class="acclist">${items.map(it=>`<label class="accitem"><input type="checkbox">${it}</label>`).join('')}</div>`:''}
-  </div>`;
+  return `<div class="acclist">${items.map(it=>`<label class="accitem"><input type="checkbox">${it}</label>`).join('')}</div>`;
 }
 
 // ---- 分群 ----
@@ -402,12 +399,13 @@ function cardView(units){
     if(u.type==='single'){
       const e=u.item, s=catStyle(e['分類']);
       const ico=e['照片網址']?`<img src="${e['照片網址']}" alt="">`:s.e;
+      const hasAcc=accCount(e)>0;
       return `<div class="card" style="border-left:3px solid ${s.c}">
         <div class="cardtop"><div class="cico" style="background:${s.c}22">${ico}</div>
-          <h3>${e['名稱']}</h3>${liveBadge(e)}</div>
+          <h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']} ${accBadge(e)}</h3>${liveBadge(e)}</div>
         <div class="meta">${catTag(e['分類'])}${e['型號']?' · '+e['型號']:''}${(Number(e['數量'])||1)>1?' · 庫存 '+e['數量']:''}</div>
         ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
-        ${accBlock(e)}
+        ${hasAcc&&expandedAcc[e.id]?accChecklist(e):''}
         <div style="flex:1"></div>${addBtn(e)}</div>`;
     }
     const open=expanded[u.name], s=catStyle(u.cat);
@@ -429,9 +427,11 @@ function listView(units){
   units.forEach(u=>{
     if(u.type==='single'){
       const e=u.item, s=catStyle(e['分類']);
+      const hasAcc=accCount(e)>0;
       rows+=`<div class="lrow" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="lico">${s.e}</span>
-        <div class="nm"><div class="t">${e['名稱']}</div><div class="meta">${e['備註']||''}</div></div>
+        <div class="nm" ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}><div class="t">${e['名稱']} ${accBadge(e)}</div><div class="meta">${e['備註']||''}</div></div>
         ${catTag(e['分類'])}${liveBadge(e)}${addBtn(e)}</div>`;
+      if(hasAcc&&expandedAcc[e.id]) rows+=`<div class="lrow sub">${accChecklist(e)}</div>`;
     }else{
       const open=expanded[u.name], s=catStyle(u.cat);
       rows+=`<div class="lrow" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="caret ${open?'open':''}" onclick="toggleGroup('${u.name}')">▶</span>
