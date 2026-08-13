@@ -942,7 +942,13 @@ function openEditProject(idx,scope){
   const g=arr[idx]; if(!g) return;
   const liveItems=g.items.filter(i=>['待審核','已核准'].includes(i['狀態']));
   if(!liveItems.length) return toast('這個專案沒有可調整的項目','err');
-  savedCart=cart; // 暫存目前真正待送出的借用清單，調整期間完全不受影響
+  if(editMode){
+    // 已經在調整別的（或同一個）專案：不能再暫存一次，否則會把「調整中、還沒存檔」的暫時清單
+    // 誤存成「原本真正的借用清單」，真正的清單就救不回來了。只在第一次進入調整模式時暫存。
+    if(!confirm('目前正在調整另一個專案，尚未儲存的變更會放棄，確定要切換？')) return;
+  }else{
+    savedCart=cart; // 只有第一次進入調整模式才暫存真正待送出的借用清單，調整期間完全不受影響
+  }
   cart={};
   liveItems.forEach(i=>{
     const eq=DATA.equipment.find(x=>x.id===i['器材id']);
