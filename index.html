@@ -183,6 +183,10 @@
 
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:12px 20px;border-radius:12px;z-index:100;opacity:0;transition:.3s;pointer-events:none;max-width:90%}
   .toast.on{opacity:1}.toast.err{border-color:var(--red)}.toast.ok{border-color:var(--green)}
+  .updatebar{position:fixed;top:0;left:0;right:0;z-index:200;background:#2a2412;border-bottom:1px solid var(--accent);
+    color:var(--accent2);padding:10px 16px;text-align:center;font-size:13px;font-weight:600;
+    display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+  .updatebar.on{display:flex}
   .loading{text-align:center;padding:60px;color:var(--sub)}
   .hide{display:none!important}
 </style>
@@ -301,7 +305,15 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="updatebar" id="updateBar">
+  🔄 系統已更新到最新版本，請先儲存目前操作，稍候會自動重新整理
+  <button class="btn sm pri" onclick="location.reload()">立即重新整理</button>
+</div>
+
 <script>
+// 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
+const APP_VERSION='2026081301';
+
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
 
@@ -1140,6 +1152,31 @@ document.addEventListener('paste',e=>{
   for(const it of items){if(it.type&&it.type.startsWith('image/')){const f=it.getAsFile();if(f){processImage(f);e.preventDefault();}break;}}
 });
 document.getElementById('tabs').addEventListener('click',e=>{if(e.target.dataset.view){VIEW=e.target.dataset.view;render();}});
+
+// ---- 版本偵測：頁面開著沒關的人，偵測到新版會提醒並自動重整 ----
+let updateFound=false, updateTimer=null;
+function checkForUpdate(){
+  if(updateFound) return;
+  fetch(location.pathname+'?_v='+Date.now(),{cache:'no-store'})
+    .then(r=>r.text())
+    .then(html=>{
+      const m=html.match(/APP_VERSION\s*=\s*'([^']+)'/);
+      if(m && m[1] && m[1]!==APP_VERSION){ updateFound=true; showUpdateBar(); }
+    }).catch(()=>{});
+}
+function showUpdateBar(){
+  document.getElementById('updateBar').classList.add('on');
+  scheduleAutoReload();
+}
+function scheduleAutoReload(){
+  clearTimeout(updateTimer);
+  updateTimer=setTimeout(()=>{
+    if(document.querySelector('.overlay.on')){ scheduleAutoReload(); return; } // 有視窗開著先不強制，等關掉再重整
+    location.reload();
+  },6000);
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkForUpdate(); });
+setInterval(checkForUpdate,120000);
 
 load();
 </script>
