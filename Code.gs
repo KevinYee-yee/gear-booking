@@ -233,6 +233,7 @@ function apiEditProject(p) {
       setCell(SHEET_RESV, r.row, '數量', keep[eid]['數量']);
       setCell(SHEET_RESV, r.row, '借出日', p['借出日']);
       setCell(SHEET_RESV, r.row, '歸還日', p['歸還日']);
+      if (p['使用地點']) setCell(SHEET_RESV, r.row, '使用地點', p['使用地點']);
       setCell(SHEET_RESV, r.row, '狀態', '待審核');
       setCell(SHEET_RESV, r.row, '審核備註', '');
       handled[eid] = true;
@@ -247,7 +248,7 @@ function apiEditProject(p) {
     var equip = findRowById(SHEET_EQUIP, eid);
     writeReservation(equip.data, {
       借用人: base['借用人'], 部門: base['部門'], 聯絡方式: base['聯絡方式'],
-      借出日: p['借出日'], 歸還日: p['歸還日'], 用途: base['用途'], 使用地點: base['使用地點']
+      借出日: p['借出日'], 歸還日: p['歸還日'], 用途: base['用途'], 使用地點: p['使用地點'] || base['使用地點']
     }, keep[eid]['數量'], base['批次']);
   });
 

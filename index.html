@@ -816,10 +816,10 @@ function openCart(){
   const nameEl=document.getElementById('ckName'), deptEl=document.getElementById('ckDept'),
         mailEl=document.getElementById('ckMail'), purEl=document.getElementById('ckPurpose'),
         locEl=document.getElementById('ckLocation');
-  const idFields=[nameEl,deptEl,mailEl,purEl,locEl];
+  const idFields=[nameEl,deptEl,mailEl,purEl];  // 借用人/部門/Email/專案名稱鎖定；時間、地點、器材都可調整
   if(editMode){
     document.getElementById('ckTitle').textContent='調整借用需求';
-    document.getElementById('ckSub').textContent='瀏覽庫存調整器材與時間，送出後這個專案會整個退回待審核';
+    document.getElementById('ckSub').textContent='可調整器材、時間、使用地點，送出後這個專案會整個退回待審核';
     document.getElementById('ckSubmit').textContent='儲存並重新送審';
     document.getElementById('ckExitEdit').classList.remove('hide');
     const sp=String(editMode.借出日).split(' '), ep=String(editMode.歸還日).split(' ');
@@ -827,7 +827,7 @@ function openCart(){
     edd.value=ep[0]||''; et.value=ep[1]||'18:00';
     nameEl.value=editMode.借用人||''; deptEl.value=editMode.部門||'';
     mailEl.value=editMode.聯絡方式||''; purEl.value=editMode.用途||'';
-    locEl.value=editMode.使用地點||'';
+    locEl.value=editMode.使用地點||''; locEl.disabled=false;
     idFields.forEach(el=>el.disabled=true);
   }else{
     document.getElementById('ckTitle').textContent='借用清單';
@@ -835,6 +835,7 @@ function openCart(){
     document.getElementById('ckSubmit').textContent='送出申請';
     document.getElementById('ckExitEdit').classList.add('hide');
     idFields.forEach(el=>el.disabled=false);
+    locEl.disabled=false;
     if(!sd.value){sd.value=todayStr();st.value='09:00';}
     // 自動帶入本機記住的上次借用資料
     const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
@@ -904,9 +905,11 @@ document.getElementById('ckSubmit').onclick=async()=>{
   if(e2<=s) return toast('歸還時間需晚於借出時間','err');
 
   if(editMode){
+    const loc=document.getElementById('ckLocation').value.trim();
+    if(!loc) return toast('請填寫使用地點','err');
     if(!items.length && !confirm('清單是空的，儲存後這個專案會被整個取消，確定？')) return;
     toast('更新中…');
-    const r=await api('edit_project',{oldIds:editMode.oldIds,items,借出日:s,歸還日:e2},true);
+    const r=await api('edit_project',{oldIds:editMode.oldIds,items,借出日:s,歸還日:e2,使用地點:loc},true);
     if(r.ok){
       editMode=null; cart=savedCart||{}; savedCart=null; saveCart();
       closeModal('cartModal'); toast('已更新，重新進入待審核','ok'); load();
