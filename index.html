@@ -220,6 +220,7 @@
     </div>
     <div class="field"><label>Email（接收核准/拒絕通知）*</label><input type="email" id="ckMail" placeholder="you@company.com"></div>
     <div class="field"><label>專案 / 用途名稱（會成為卡片標題）</label><input id="ckPurpose" placeholder="例：8月產品拍攝"></div>
+    <div class="field"><label>使用地點 *</label><input id="ckLocation" placeholder="例：公司棚內 / 台北市信義區戶外"></div>
     <div class="actions">
       <button class="btn" onclick="closeModal('cartModal')">繼續挑選</button>
       <button class="btn pri" id="ckSubmit">送出申請</button>
@@ -429,7 +430,7 @@ function groupResv(list){
   list.forEach(r=>{
     const name=(r['用途']||'').trim();
     const key=name?('P:'+name):('B:'+(r['批次']||r['id']));
-    if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],借出日:r['借出日'],歸還日:r['歸還日'],items:[]};order.push(key);}
+    if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],使用地點:r['使用地點'],借出日:r['借出日'],歸還日:r['歸還日'],items:[]};order.push(key);}
     const gg=g[key]; gg.items.push(r);
     if(String(r['借出日'])<String(gg.借出日)) gg.借出日=r['借出日'];   // 期間取涵蓋範圍
     if(String(r['歸還日'])>String(gg.歸還日)) gg.歸還日=r['歸還日'];
@@ -695,7 +696,7 @@ function renderMyResv(){
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'my')">▶</span>
         <div class="grow" onclick="toggleResvIdx(${idx},'my')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span></div>
-          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']} ｜ ${statusSummary(g.items)}</div></div>
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
         ${canEdit?`<button class="btn sm" onclick="openEditProject(${idx},'my')">✏️ 調整需求</button>`:''}
       </div>
       ${open?`<div class="variants">${items}</div>`:''}
@@ -729,7 +730,7 @@ function renderAdmin(){
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'ad')">▶</span>
         <div class="grow" onclick="toggleResvIdx(${idx},'ad')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span>${overdue?' <span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
-          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''} ｜ ${statusSummary(g.items)}</div></div>
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
         ${(pend.length||appr.length)?`<button class="btn sm" onclick="openEditProject(${idx},'ad')">✏️ 調整需求</button>`:''}
         ${pend.length?`<button class="btn sm gd" onclick="approveAll(${idx})">全部批准</button><button class="btn sm rd" onclick="rejectAll(${idx})">全部拒絕</button>`:''}
         ${appr.length?`<button class="btn sm" onclick="returnAll(${idx})">全部歸還</button>`:''}
@@ -813,8 +814,9 @@ function openCart(){
   const sd=document.getElementById('ckStartDate'), st=document.getElementById('ckStartTime');
   const edd=document.getElementById('ckEndDate'), et=document.getElementById('ckEndTime');
   const nameEl=document.getElementById('ckName'), deptEl=document.getElementById('ckDept'),
-        mailEl=document.getElementById('ckMail'), purEl=document.getElementById('ckPurpose');
-  const idFields=[nameEl,deptEl,mailEl,purEl];
+        mailEl=document.getElementById('ckMail'), purEl=document.getElementById('ckPurpose'),
+        locEl=document.getElementById('ckLocation');
+  const idFields=[nameEl,deptEl,mailEl,purEl,locEl];
   if(editMode){
     document.getElementById('ckTitle').textContent='調整借用需求';
     document.getElementById('ckSub').textContent='瀏覽庫存調整器材與時間，送出後這個專案會整個退回待審核';
@@ -825,6 +827,7 @@ function openCart(){
     edd.value=ep[0]||''; et.value=ep[1]||'18:00';
     nameEl.value=editMode.借用人||''; deptEl.value=editMode.部門||'';
     mailEl.value=editMode.聯絡方式||''; purEl.value=editMode.用途||'';
+    locEl.value=editMode.使用地點||'';
     idFields.forEach(el=>el.disabled=true);
   }else{
     document.getElementById('ckTitle').textContent='借用清單';
@@ -918,8 +921,9 @@ document.getElementById('ckSubmit').onclick=async()=>{
     部門:document.getElementById('ckDept').value.trim(),
     聯絡方式:document.getElementById('ckMail').value.trim(),
     用途:document.getElementById('ckPurpose').value.trim(),
+    使用地點:document.getElementById('ckLocation').value.trim(),
   };
-  if(!p.借用人||!p.部門) return toast('請填寫必填欄位','err');
+  if(!p.借用人||!p.部門||!p.使用地點) return toast('請填寫必填欄位','err');
   if(!p.聯絡方式||p.聯絡方式.indexOf('@')<0) return toast('請填寫有效 Email','err');
   toast('送出中…');
   const r=await api('create_reservations',p,true);
@@ -944,7 +948,7 @@ function openEditProject(idx,scope){
     const eq=DATA.equipment.find(x=>x.id===i['器材id']);
     cart[i['器材id']]={id:i['器材id'],名稱:i['器材名稱'],數量:Number(i['數量'])||1,stock:eq?Number(eq['數量'])||1:99};
   });
-  editMode={oldIds:liveItems.map(i=>i.id),借用人:g['借用人'],部門:g['部門'],聯絡方式:g['聯絡方式'],用途:g['用途']||'',借出日:liveItems[0]['借出日'],歸還日:liveItems[0]['歸還日']};
+  editMode={oldIds:liveItems.map(i=>i.id),借用人:g['借用人'],部門:g['部門'],聯絡方式:g['聯絡方式'],用途:g['用途']||'',使用地點:liveItems[0]['使用地點']||'',借出日:liveItems[0]['借出日'],歸還日:liveItems[0]['歸還日']};
   VIEW='inventory'; render();
   toast('已載入這個專案的器材，逛庫存調整後點右下角清單結帳','ok');
   openCart();

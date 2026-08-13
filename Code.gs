@@ -14,7 +14,7 @@
  *
  * 工作表「預約」欄位（第 1 列為標題）：
  *   A:id B:器材id C:器材名稱 D:借用人 E:部門 F:聯絡方式(Email)
- *   G:借出日 H:歸還日 I:用途 J:狀態 K:申請時間 L:審核備註 M:數量
+ *   G:借出日 H:歸還日 I:用途 J:狀態 K:申請時間 L:審核備註 M:數量 N:批次 O:使用地點
  *   狀態值：待審核 / 已核准 / 已拒絕 / 已歸還 / 已取消
  */
 
@@ -163,7 +163,7 @@ function writeReservation(equipData, p, qty, batch) {
   sh.appendRow([
     id, equipData['id'], equipData['名稱'], p['借用人'], p['部門'],
     p['聯絡方式'] || '', p['借出日'], p['歸還日'], p['用途'] || '',
-    '待審核', new Date(), '', qty, batch || ''
+    '待審核', new Date(), '', qty, batch || '', p['使用地點'] || ''
   ]);
   return id;
 }
@@ -247,7 +247,7 @@ function apiEditProject(p) {
     var equip = findRowById(SHEET_EQUIP, eid);
     writeReservation(equip.data, {
       借用人: base['借用人'], 部門: base['部門'], 聯絡方式: base['聯絡方式'],
-      借出日: p['借出日'], 歸還日: p['歸還日'], 用途: base['用途']
+      借出日: p['借出日'], 歸還日: p['歸還日'], 用途: base['用途'], 使用地點: base['使用地點']
     }, keep[eid]['數量'], base['批次']);
   });
 
@@ -307,7 +307,7 @@ function apiReviewBatch(p) {
   var approved = p.decision === 'approve';
   var note = p['審核備註'] || '';
   var done = [], failed = [];
-  var applicant = '', name = '', proj = '', period = '';
+  var applicant = '', name = '', proj = '', period = '', loc = '';
 
   for (var i = 0; i < ids.length; i++) {
     var r = findRowById(SHEET_RESV, ids[i]);
@@ -323,7 +323,7 @@ function apiReviewBatch(p) {
     if (note) setCell(SHEET_RESV, r.row, '審核備註', note);
     done.push({ 名稱: r.data['器材名稱'], 數量: Number(r.data['數量']) || 1 });
     applicant = r.data['聯絡方式']; name = r.data['借用人'];
-    proj = r.data['用途']; period = r.data['借出日'] + ' ~ ' + r.data['歸還日'];
+    proj = r.data['用途']; period = r.data['借出日'] + ' ~ ' + r.data['歸還日']; loc = r.data['使用地點'];
   }
 
   if (done.length) {
@@ -331,7 +331,8 @@ function apiReviewBatch(p) {
     notify(applicant,
       '【器材預約】' + (approved ? '已核准' : '未通過') + '：' + (proj || name),
       name + ' 您好，\n\n您的預約' + (approved ? '已核准 ✅' : '未通過 ❌') + '：\n\n' +
-      (proj ? '專案：' + proj + '\n' : '') + '期間：' + period + '\n\n' + lines + '\n' +
+      (proj ? '專案：' + proj + '\n' : '') + '期間：' + period + '\n' +
+      (loc ? '地點：' + loc + '\n' : '') + '\n' + lines + '\n' +
       (note ? '\n備註：' + note + '\n' : '') +
       (approved ? '\n請於借出日前往領取器材。' : '\n如有疑問請聯繫器材管理人員。') + '\n\n' + APP_URL);
   }
@@ -435,6 +436,7 @@ function notifyAdminNew(items, p) {
     '借用人：' + p['借用人'] + '（' + p['部門'] + '）\n' +
     '期間：' + p['借出日'] + ' ~ ' + p['歸還日'] + '\n' +
     '用途：' + (p['用途'] || '—') + '\n' +
+    '使用地點：' + (p['使用地點'] || '—') + '\n' +
     '聯絡：' + (p['聯絡方式'] || '—') + '\n\n' +
     '前往審核：' + APP_URL);
 }
@@ -519,7 +521,7 @@ function setupSheets() {
 
   var rv = ss.getSheetByName(SHEET_RESV) || ss.insertSheet(SHEET_RESV);
   rv.clear();
-  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註','數量','批次']);
+  rv.appendRow(['id','器材id','器材名稱','借用人','部門','聯絡方式','借出日','歸還日','用途','狀態','申請時間','審核備註','數量','批次','使用地點']);
   rv.setFrozenRows(1);
 }
 
@@ -534,6 +536,8 @@ function upgradeSchema() {
   var rv = sheet(SHEET_RESV);
   var rh = rv.getRange(1, 1, 1, rv.getLastColumn()).getValues()[0];
   if (rh.indexOf('批次') < 0) rv.getRange(1, rv.getLastColumn() + 1).setValue('批次');
+  rh = rv.getRange(1, 1, 1, rv.getLastColumn()).getValues()[0];
+  if (rh.indexOf('使用地點') < 0) rv.getRange(1, rv.getLastColumn() + 1).setValue('使用地點');
 
   var eq = sheet(SHEET_EQUIP);
   var eh = eq.getRange(1, 1, 1, eq.getLastColumn()).getValues()[0];
