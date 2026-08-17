@@ -68,6 +68,7 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column}
   .cphoto{width:100%;aspect-ratio:4/3;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:52px;overflow:hidden;position:relative;text-align:center}
   .cphoto img{width:100%;height:100%;object-fit:contain;padding:8px}
+  .nophoto{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.6);color:#e5674f;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
   .cbody{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px;flex:1}
   .card h3{margin:0;font-size:16px;font-weight:700;line-height:1.35}
   .cardtop{display:flex;align-items:flex-start;gap:12px}
@@ -325,7 +326,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081302';
+const APP_VERSION='2026081303';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -341,6 +342,7 @@ let expandedResv={};       // 預約專案卡展開狀態
 let adGroups=[], myGroups=[]; // 目前渲染的預約分組（管理端 / 查詢）
 let expandedAcc={};        // 器材「附帶清單」展開狀態
 let adminCat='全部';       // 管理端器材清單的分類篩選
+let adminViewMode=localStorage.getItem('gear_admin_viewmode')||'list';  // 管理端器材清單卡片/列表
 let editBundleId=null, bundleSel={};  // 組合包編輯：id、勾選的器材({id:數量})
 let cartBundleExpanded={};            // 購物車內組合包展開狀態
 let expandedBundle={};                // 庫存頁「快速組合」預覽展開狀態
@@ -801,10 +803,18 @@ function renderAdmin(){
       <button class="btn sm" onclick="openEquip('${e.id}')">編輯</button></div>`;}).join('');
   return `
     <div class="sec-title">預約 / 借用 ${pendingTotal?`<span class="count">${pendingTotal} 待審</span>`:''}</div><div class="rowlist">${gHtml}</div>
-    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>器材清單（${adEquip.length}/${DATA.equipment.length}）</span>
-      <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button></div>
+    <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <span>器材清單（${adEquip.length}/${DATA.equipment.length}）</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div class="vtoggle">
+          <button class="${adminViewMode==='list'?'on':''}" onclick="setAdminView('list')">☰ 列表</button>
+          <button class="${adminViewMode==='card'?'on':''}" onclick="setAdminView('card')">▦ 卡片</button>
+        </div>
+        <button class="btn pri sm" onclick="openEquip(null)">+ 新增器材</button>
+      </div>
+    </div>
     <div class="pill-filter">${adChips}</div>
-    <div class="rowlist">${eHtml}</div>
+    ${adminViewMode==='card'?adminEquipGrid(adEquip):`<div class="rowlist">${eHtml}</div>`}
     <div class="sec-title" style="display:flex;justify-content:space-between;align-items:center"><span>🎁 組合包（${(DATA.bundles||[]).length}）</span>
       <button class="btn pri sm" onclick="openBundle(null)">+ 新增組合</button></div>
     <div class="rowlist">${bundleAdminHtml()}</div>`;
@@ -847,6 +857,22 @@ function clearQuery(){
 }
 function setCat(c){filterCat=c;render();}
 function setAdminCat(c){adminCat=c;render();}
+function setAdminView(v){adminViewMode=v;localStorage.setItem('gear_admin_viewmode',v);render();}
+function adminEquipGrid(list){
+  return `<div class="grid">${list.map(e=>{
+    const s=catStyle(e['分類']), hasPhoto=!!e['照片網址'];
+    const photo=hasPhoto?`<img src="${e['照片網址']}" alt="">`:s.e;
+    return `<div class="card">
+      <div class="cphoto" style="background:${s.c}1c;color:${s.c}">${photo}${hasPhoto?'':'<span class="nophoto">⚠️ 無照片</span>'}</div>
+      <div class="cbody">
+        <div class="cardtop"><h3>${e['名稱']}</h3></div>
+        <div class="cardmeta1">${liveBadge(e)}${catTag(e['分類'])}${(Number(e['數量'])||1)>1?`<span class="meta">庫存 ${e['數量']}</span>`:''}</div>
+        <div class="meta">${[e['群組']?'群組:'+e['群組']:'',e['型號']].filter(Boolean).join(' · ')||'—'}${e['附帶']?` · 內含 ${accList(e['附帶']).length} 件`:''}</div>
+        <div style="flex:1"></div>
+        <button class="btn sm" onclick="openEquip('${e.id}')">編輯</button>
+      </div></div>`;
+  }).join('')}</div>`;
+}
 function setView(v){viewMode=v;localStorage.setItem('gear_viewmode',v);render();}
 function toggleGroup(n){expanded[n]=!expanded[n];render();}
 
