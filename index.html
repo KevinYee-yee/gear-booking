@@ -140,6 +140,19 @@
   .field input,.field select,.field textarea{width:100%}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .dtrow{display:grid;grid-template-columns:1.3fr 1fr;gap:10px}
+
+  /* 查詢借用時段列 */
+  .qbar{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:18px 0}
+  .qbarhead{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .qbarrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .qbarrow .dtrow{flex:1;min-width:220px}
+  .qarrow{color:var(--sub);flex:0 0 auto}
+
+  /* 依查詢時段變暗 + 衝突小字 */
+  .card.dimmed{opacity:.4}
+  .card.dimmed .cphoto{filter:grayscale(1)}
+  .vrow.dimmed,.lrow.dimmed{opacity:.45}
+  .conflictnote{font-size:12px;color:var(--red);margin-top:2px}
   .editexit{font-size:12px;color:var(--red);cursor:pointer;margin:-6px 0 12px;font-weight:600}
   .dtrow input{color-scheme:dark}
   .modal .actions{display:flex;gap:10px;margin-top:18px}
@@ -312,7 +325,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081301';
+const APP_VERSION='2026081302';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -362,21 +375,44 @@ async function load(){
   }
 }
 
-// ---- 目前（此刻）已借出的份數 ----
-function usedNow(id){
-  const now=nowStr(); let u=0;
+// ---- 查詢時段：沒選就看「此刻」，選了就看該時段是否會撞期 ----
+let queryStart=localStorage.getItem('gear_qstart')||'', queryEnd=localStorage.getItem('gear_qend')||'';
+const windowActive=()=>!!(queryStart&&queryEnd);
+function overlapInfo(id){
+  const win=windowActive();
+  const s=win?queryStart:nowStr(), e=win?queryEnd:nowStr();
+  let used=0; const conflicts=[];
   DATA.reservations.forEach(r=>{
-    if(r['器材id']===id && r['狀態']==='已核准' && String(r['借出日'])<=now && now<=String(r['歸還日']))
-      u+=(Number(r['數量'])||1);
+    if(r['器材id']!==id||r['狀態']!=='已核准') return;
+    const rs=String(r['借出日']), re=String(r['歸還日']);
+    const overlap=win?(s<re&&e>rs):(rs<=s&&s<=re); // 查詢時段＝真重疊(接頭不算)；沒選時段＝此刻是否落在區間內
+    if(overlap){ used+=(Number(r['數量'])||1); conflicts.push({s:rs,e:re}); }
   });
-  return u;
+  return {used,conflicts};
+}
+function fmtShort(dt){
+  const [d,t]=String(dt).split(' '); const parts=d.split('-');
+  return `${Number(parts[1])}/${Number(parts[2])}${t?' '+t:''}`;
+}
+function conflictNote(id){
+  if(!windowActive()) return '';
+  const {conflicts}=overlapInfo(id);
+  if(!conflicts.length) return '';
+  const txt=conflicts.slice(0,2).map(c=>`${fmtShort(c.s)}–${fmtShort(c.e)}`).join('、');
+  return `<div class="conflictnote">🔒 已被借：${txt}${conflicts.length>2?` 等${conflicts.length}筆`:''}</div>`;
+}
+function isDimmed(eq){
+  if(!windowActive()||!bookable(eq)) return false;
+  const stock=Number(eq['數量'])||1;
+  return stock-overlapInfo(eq.id).used<=0;
 }
 function liveBadge(eq){
   if(eq['狀態']!=='可借用') return badge(eq['狀態']);
   const stock=Number(eq['數量'])||1;
-  const free=Math.max(0,stock-usedNow(eq.id));
+  const free=Math.max(0,stock-overlapInfo(eq.id).used);
+  const win=windowActive();
   if(stock===1) return free>0?badge('可借用'):badge('借出中');
-  return `<span class="badge ${free>0?'b-ok':'b-out'}"><span class="dot"></span>現可借 ${free}/${stock}</span>`;
+  return `<span class="badge ${free>0?'b-ok':'b-out'}"><span class="dot"></span>${win?'時段內可借':'現可借'} ${free}/${stock}</span>`;
 }
 function badge(s){
   const m={'可借用':'b-ok','借出中':'b-out','維修中':'b-fix','報廢':'b-dead','待審核':'b-wait','已核准':'b-appr','已拒絕':'b-rej','已歸還':'b-ret','已取消':'b-ret'};
@@ -490,8 +526,10 @@ function renderInventory(){
   else if(viewMode==='list') body=listView(units);
   else body=cardView(units);
   const sortOpts=[['default','預設順序'],['freq_desc','常借次數 ↓'],['freq_asc','常借次數 ↑'],['name_asc','字母 A→Z'],['name_desc','字母 Z→A']];
+  const sp=queryStart.split(' '), ep=queryEnd.split(' ');
   return `
     ${onboardBanner()}
+    ${queryBar(sp,ep)}
     ${bundleSection()}
     <div class="toolbar">
       <input class="search" id="searchBox" placeholder="搜尋名稱 / 型號 / 用途 / 配件…" value="${searchQ}">
@@ -579,6 +617,7 @@ function addBundleToCart(id,bundleName){
 
 function addBtn(eq){
   if(!bookable(eq)) return '';
+  if(isDimmed(eq)) return `<button class="btn sm" disabled>該時段無可借數量</button>`;
   const inCart=cart[eq.id]?` (${cart[eq.id].數量})`:'';
   return `<button class="btn pri sm" onclick="addCart('${eq.id}')">加入清單${inCart}</button>`;
 }
@@ -589,12 +628,14 @@ function cardView(units){
       const e=u.item, s=catStyle(e['分類']);
       const photo=e['照片網址']?`<img src="${e['照片網址']}" alt="">`:s.e;
       const hasAcc=accCount(e)>0;
-      return `<div class="card">
+      const dim=isDimmed(e);
+      return `<div class="card ${dim?'dimmed':''}">
         <div class="cphoto" style="background:${s.c}1c;color:${s.c}">${photo}</div>
         <div class="cbody">
           <div class="cardtop"><h3 ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}>${e['名稱']}</h3></div>
           <div class="cardmeta1">${liveBadge(e)}${catTag(e['分類'])}${e['型號']?`<span class="meta">${e['型號']}</span>`:''}${(Number(e['數量'])||1)>1?`<span class="meta">庫存 ${e['數量']}</span>`:''}${hasAcc?`<span onclick="toggleAcc('${e.id}')" style="cursor:pointer">${accBadge(e)}</span>`:''}</div>
           ${e['備註']?`<div class="meta">${e['備註']}</div>`:''}
+          ${conflictNote(e.id)}
           ${hasAcc&&expandedAcc[e.id]?accChecklist(e):''}
           <div style="flex:1"></div>${addBtn(e)}
         </div></div>`;
@@ -609,7 +650,7 @@ function cardView(units){
         </div>
         <div class="cardmeta1">${catTag(u.cat)}<span class="meta">點開選規格</span></div>
         ${open?`<div class="variants">${u.items.map(e=>`
-          <div class="vrow"><span class="vn">${e['名稱']} ${liveBadge(e)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
+          <div class="vrow ${isDimmed(e)?'dimmed':''}"><span class="vn">${e['名稱']} ${liveBadge(e)}${conflictNote(e.id)}</span>${addBtn(e)}</div>`).join('')}</div>`:''}
       </div></div>`;
   }).join('')}</div>`;
 }
@@ -618,10 +659,10 @@ function listView(units){
   let rows='';
   units.forEach(u=>{
     if(u.type==='single'){
-      const e=u.item, s=catStyle(e['分類']);
+      const e=u.item, s=catStyle(e['分類']), dim=isDimmed(e);
       const hasAcc=accCount(e)>0;
-      rows+=`<div class="lrow" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="lico">${s.e}</span>
-        <div class="nm" ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}><div class="t">${e['名稱']} ${accBadge(e)}</div><div class="meta">${e['備註']||''}</div></div>
+      rows+=`<div class="lrow ${dim?'dimmed':''}" style="box-shadow:inset 3px 0 0 ${s.c}"><span class="lico">${s.e}</span>
+        <div class="nm" ${hasAcc?`onclick="toggleAcc('${e.id}')" style="cursor:pointer"`:''}><div class="t">${e['名稱']} ${accBadge(e)}</div><div class="meta">${e['備註']||''}</div>${conflictNote(e.id)}</div>
         ${catTag(e['分類'])}${liveBadge(e)}${addBtn(e)}</div>`;
       if(hasAcc&&expandedAcc[e.id]) rows+=`<div class="lrow sub">${accChecklist(e)}</div>`;
     }else{
@@ -631,7 +672,7 @@ function listView(units){
         <div class="nm" onclick="toggleGroup('${u.name}')" style="cursor:pointer"><div class="t">${u.name}</div><div class="meta">${u.items.length} 種規格</div></div>
         ${catTag(u.cat)}</div>`;
       if(open) u.items.forEach(e=>{
-        rows+=`<div class="lrow sub"><div class="nm"><div class="t" style="font-weight:500">${e['名稱']}</div></div>${liveBadge(e)}${addBtn(e)}</div>`;
+        rows+=`<div class="lrow sub ${isDimmed(e)?'dimmed':''}"><div class="nm"><div class="t" style="font-weight:500">${e['名稱']}</div>${conflictNote(e.id)}</div>${liveBadge(e)}${addBtn(e)}</div>`;
       });
     }
   });
@@ -780,6 +821,30 @@ function bundleAdminHtml(){
 }
 
 // ---- 互動 ----
+// ---- 查詢借用時段列 ----
+function queryBar(sp,ep){
+  return `<div class="qbar">
+    <div class="qbarhead">🔍 查詢借用時段<span class="meta">選好時間，下面器材會依這個時段標示是否可借</span></div>
+    <div class="qbarrow">
+      <div class="dtrow"><input type="date" id="qStartDate" value="${sp[0]||''}" onchange="applyQuery()"><input type="time" id="qStartTime" value="${sp[1]||''}" onchange="applyQuery()"></div>
+      <span class="qarrow">→</span>
+      <div class="dtrow"><input type="date" id="qEndDate" value="${ep[0]||''}" onchange="applyQuery()"><input type="time" id="qEndTime" value="${ep[1]||''}" onchange="applyQuery()"></div>
+      ${windowActive()?`<button class="btn sm" onclick="clearQuery()">清除</button>`:''}
+    </div>
+  </div>`;
+}
+function applyQuery(){
+  const sd=document.getElementById('qStartDate').value, st=document.getElementById('qStartTime').value;
+  const ed=document.getElementById('qEndDate').value, et=document.getElementById('qEndTime').value;
+  queryStart=sd&&st?`${sd} ${st}`:''; queryEnd=ed&&et?`${ed} ${et}`:'';
+  localStorage.setItem('gear_qstart',queryStart); localStorage.setItem('gear_qend',queryEnd);
+  render();
+}
+function clearQuery(){
+  queryStart=''; queryEnd='';
+  localStorage.removeItem('gear_qstart'); localStorage.removeItem('gear_qend');
+  render();
+}
 function setCat(c){filterCat=c;render();}
 function setAdminCat(c){adminCat=c;render();}
 function setView(v){viewMode=v;localStorage.setItem('gear_viewmode',v);render();}
@@ -848,7 +913,10 @@ function openCart(){
     document.getElementById('ckExitEdit').classList.add('hide');
     idFields.forEach(el=>el.disabled=false);
     locEl.disabled=false;
-    if(!sd.value){sd.value=todayStr();st.value='09:00';}
+    if(!sd.value){
+      if(windowActive()){ const qsp=queryStart.split(' '),qep=queryEnd.split(' '); sd.value=qsp[0];st.value=qsp[1];edd.value=qep[0];et.value=qep[1]; }
+      else{ sd.value=todayStr();st.value='09:00'; }
+    }
     // 自動帶入本機記住的上次借用資料
     const me=JSON.parse(localStorage.getItem('gear_borrower')||'{}');
     const pf=(el,v)=>{ if(v&&!el.value) el.value=v; };
