@@ -203,6 +203,26 @@
   .updatebar.on{display:flex}
   .loading{text-align:center;padding:60px;color:var(--sub)}
   .hide{display:none!important}
+
+  /* A4 列印出借單：畫面上不顯示，只有列印時才出現，且只有它自己會被印出來 */
+  #printArea{display:none}
+  @media print{
+    body *{visibility:hidden}
+    #printArea,#printArea *{visibility:visible}
+    #printArea{display:block;position:absolute;left:0;top:0;width:100%;background:#fff;color:#000;padding:0}
+    @page{size:A4;margin:14mm}
+  }
+  .pp-title{font-size:21px;font-weight:700;margin-bottom:2px}
+  .pp-sub{font-size:12px;color:#555;margin-bottom:14px}
+  .pp-meta{font-size:13px;margin-bottom:16px;line-height:2;border-bottom:1px solid #000;padding-bottom:12px}
+  .pp-meta b{display:inline-block;width:64px;color:#555;font-weight:600}
+  .pp-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #ddd;align-items:flex-start;break-inside:avoid}
+  .pp-thumb{width:56px;height:56px;object-fit:contain;border:1px solid #ccc;border-radius:6px;flex:0 0 auto;background:#f7f7f7}
+  .pp-thumb-ph{width:56px;height:56px;border:1px solid #ccc;border-radius:6px;flex:0 0 auto;background:#f7f7f7;display:flex;align-items:center;justify-content:center;font-size:22px}
+  .pp-name{font-weight:700;font-size:14px}
+  .pp-acc{font-size:12px;color:#333;margin-top:4px;line-height:1.7}
+  .pp-sign{margin-top:36px;display:flex;justify-content:space-between;gap:30px;font-size:13px}
+  .pp-sign div{flex:1;border-top:1px solid #000;padding-top:6px;color:#555}
 </style>
 
 <header>
@@ -324,9 +344,11 @@
   <button class="btn sm pri" onclick="location.reload()">立即重新整理</button>
 </div>
 
+<div id="printArea"></div>
+
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081303';
+const APP_VERSION='2026081304';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -786,6 +808,7 @@ function renderAdmin(){
         <div class="grow" onclick="toggleResvIdx(${idx},'ad')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span>${overdue?' <span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
           <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
+        <button class="btn sm" onclick="printProject(${idx})">🖨️ 列印</button>
         ${(pend.length||appr.length)?`<button class="btn sm" onclick="openEditProject(${idx},'ad')">✏️ 調整需求</button>`:''}
         ${pend.length?`<button class="btn sm gd" onclick="approveAll(${idx})">全部批准</button><button class="btn sm rd" onclick="rejectAll(${idx})">全部拒絕</button>`:''}
         ${appr.length?`<button class="btn sm" onclick="returnAll(${idx})">全部歸還</button>`:''}
@@ -1100,6 +1123,37 @@ function reviewSelected(idx,decision){
   if(decision==='reject'){const note=prompt(`拒絕勾選的 ${ids.length} 項，原因（可留空）：`); if(note===null) return; return doReview(ids,'reject',note);}
   if(!confirm(`批准勾選的 ${ids.length} 項？`)) return;
   doReview(ids,'approve');
+}
+// ---- 列印 A4 出借單 ----
+function printProject(idx){
+  const g=adGroups[idx]; if(!g) return;
+  const rows=g.items.map(r=>{
+    const eq=DATA.equipment.find(x=>x.id===r['器材id']);
+    const s=eq?catStyle(eq['分類']):{e:'📦'};
+    const thumb=eq&&eq['照片網址']?`<img class="pp-thumb" src="${eq['照片網址']}">`:`<div class="pp-thumb-ph">${s.e}</div>`;
+    const acc=eq?accList(eq['附帶']):[];
+    return `<div class="pp-item">${thumb}
+      <div style="flex:1">
+        <div class="pp-name">☐ ${r['器材名稱']} ×${Number(r['數量'])||1}　<span style="font-weight:400;color:#777">(${r['狀態']})</span></div>
+        ${acc.length?`<div class="pp-acc">內含：${acc.map(a=>'☐ '+a).join('　')}</div>`:''}
+      </div></div>`;
+  }).join('');
+  document.getElementById('printArea').innerHTML=`
+    <div class="pp-title">📷 器材出借單</div>
+    <div class="pp-sub">列印時間：${nowStr()}</div>
+    <div class="pp-meta">
+      <div><b>專案</b>${g['用途']||grpBorrower(g)}</div>
+      <div><b>借用人</b>${grpBorrower(g)}（${g['部門']}）</div>
+      <div><b>Email</b>${g['聯絡方式']||'—'}</div>
+      <div><b>期間</b>${g['借出日']} → ${g['歸還日']}</div>
+      <div><b>地點</b>${g['使用地點']||'—'}</div>
+    </div>
+    ${rows}
+    <div class="pp-sign">
+      <div>領取人簽名 / 日期</div>
+      <div>歸還人簽名 / 日期</div>
+    </div>`;
+  setTimeout(()=>window.print(),100);
 }
 function returnAll(idx){
   const g=adGroups[idx]; if(!g) return;
