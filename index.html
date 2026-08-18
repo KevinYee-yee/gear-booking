@@ -349,7 +349,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081801';
+const APP_VERSION='2026081802';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -591,6 +591,10 @@ function thumbTile(eq,size){
   const inner=eq['照片網址']?`<img src="${eq['照片網址']}" alt="">`:s.e;
   return `<div class="bthumb" style="width:${size}px;height:${size}px;background:${s.c}22;color:${s.c}">${inner}</div>`;
 }
+function itemThumb(equipId,size){
+  const eq=DATA.equipment.find(x=>x.id===equipId);
+  return eq?thumbTile(eq,size):`<div class="bthumb" style="width:${size}px;height:${size}px;background:var(--panel2);color:var(--sub)">📦</div>`;
+}
 function bundleSection(){
   const list=(DATA.bundles||[]).filter(b=>b['狀態']!=='停用');
   if(!list.length) return '';
@@ -768,7 +772,7 @@ function renderMyResv(){
     const open=expandedResv['my::'+g.key];
     const title=g['用途']||`${grpBorrower(g)} 的借用`;
     const canEdit=g.items.some(i=>['待審核','已核准'].includes(i['狀態']));
-    const items=g.items.map(r=>`<div class="vrow"><span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}${r['審核備註']?` <span class="meta">（${r['審核備註']}）</span>`:''}</span>${['待審核','已核准'].includes(r['狀態'])?`<button class="btn sm rd" onclick="cancelResv('${r.id}')">取消</button>`:''}</div>`).join('');
+    const items=g.items.map(r=>`<div class="vrow">${itemThumb(r['器材id'],32)}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(r['狀態'])}${r['審核備註']?` <span class="meta">（${r['審核備註']}）</span>`:''}</span>${['待審核','已核准'].includes(r['狀態'])?`<button class="btn sm rd" onclick="cancelResv('${r.id}')">取消</button>`:''}</div>`).join('');
     return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'my')">▶</span>
@@ -800,7 +804,7 @@ function renderAdmin(){
       const st=r['狀態'], canChk=(st==='待審核'||st==='已核准');
       const cb=canChk?`<input type="checkbox" class="chk_ad_${idx}" data-id="${r.id}" data-st="${st}" checked>`:`<span class="cbspace"></span>`;
       const act=st==='已核准'?`<button class="btn sm" onclick="markReturn('${r.id}')">歸還</button>`:'';
-      return `<div class="vrow">${cb}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(st)}</span>${act}</div>`;
+      return `<div class="vrow">${cb}${itemThumb(r['器材id'],32)}<span class="vn">${r['器材名稱']} ×${Number(r['數量'])||1} ${badge(st)}</span>${act}</div>`;
     }).join('');
     const selBar=(pend.length>1||appr.length>1)?`<div class="vrow selbar"><span class="meta">勾選項目後：</span>${pend.length?`<button class="btn sm gd" onclick="reviewSelected(${idx},'approve')">批准勾選</button><button class="btn sm rd" onclick="reviewSelected(${idx},'reject')">拒絕勾選</button>`:''}${appr.length?`<button class="btn sm" onclick="returnSelected(${idx})">歸還勾選</button>`:''}</div>`:'';
     return `<div class="item" style="flex-direction:column;align-items:stretch;gap:8px">
