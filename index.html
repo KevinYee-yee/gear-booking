@@ -204,12 +204,13 @@
   .loading{text-align:center;padding:60px;color:var(--sub)}
   .hide{display:none!important}
 
-  /* A4 列印出借單：畫面上不顯示，只有列印時才出現，且只有它自己會被印出來 */
+  /* A4 列印出借單：畫面上不顯示，只有列印時才出現，且只有它自己會被印出來。
+     其他區塊直接 display:none 整個移除、不留版面空間，避免 Windows 印表機算錯可印範圍造成裁切，
+     也避免因為隱藏元素仍佔版面高度而多印出空白頁。 */
   #printArea{display:none}
   @media print{
-    body *{visibility:hidden}
-    #printArea,#printArea *{visibility:visible}
-    #printArea{display:block;position:absolute;left:0;top:0;width:100%;background:#fff;color:#000;padding:0}
+    body>*:not(#printArea){display:none!important}
+    #printArea{display:block!important;background:#fff;color:#000}
     @page{size:A4;margin:14mm}
   }
   .pp-title{font-size:21px;font-weight:700;margin-bottom:2px}
@@ -348,7 +349,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081304';
+const APP_VERSION='2026081801';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -856,12 +857,15 @@ function bundleAdminHtml(){
 // ---- 互動 ----
 // ---- 查詢借用時段列 ----
 function queryBar(sp,ep){
+  // 時間欄先給預設值（09:00/18:00）：只點日曆選日期、時間欄還沒填時，
+  // applyQuery() 需要日期+時間都有值才會保留，沒預設值的話選好的日期會被視為「不完整」而被清空重畫掉。
+  const stv=sp[1]||'09:00', etv=ep[1]||'18:00';
   return `<div class="qbar">
     <div class="qbarhead">🔍 查詢借用時段<span class="meta">選好時間，下面器材會依這個時段標示是否可借</span></div>
     <div class="qbarrow">
-      <div class="dtrow"><input type="date" id="qStartDate" value="${sp[0]||''}" onchange="applyQuery()"><input type="time" id="qStartTime" value="${sp[1]||''}" onchange="applyQuery()"></div>
+      <div class="dtrow"><input type="date" id="qStartDate" value="${sp[0]||''}" onchange="applyQuery()"><input type="time" id="qStartTime" value="${stv}" onchange="applyQuery()"></div>
       <span class="qarrow">→</span>
-      <div class="dtrow"><input type="date" id="qEndDate" value="${ep[0]||''}" onchange="applyQuery()"><input type="time" id="qEndTime" value="${ep[1]||''}" onchange="applyQuery()"></div>
+      <div class="dtrow"><input type="date" id="qEndDate" value="${ep[0]||''}" onchange="applyQuery()"><input type="time" id="qEndTime" value="${etv}" onchange="applyQuery()"></div>
       ${windowActive()?`<button class="btn sm" onclick="clearQuery()">清除</button>`:''}
     </div>
   </div>`;
