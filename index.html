@@ -349,7 +349,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081803';
+const APP_VERSION='2026081804';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -502,7 +502,8 @@ function groupResv(list){
   const g={}, order=[];
   list.forEach(r=>{
     const name=(r['用途']||'').trim();
-    const key=name?('P:'+name):('B:'+(r['批次']||r['id']));
+    // 同名專案要「時間也完全一樣」才會合併成一張卡；時段不同（例：9/3、9/4）自動各自獨立顯示，不用手動拆
+    const key=name?('P:'+name+'|'+r['借出日']+'→'+r['歸還日']):('B:'+(r['批次']||r['id']));
     if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],使用地點:r['使用地點'],借出日:r['借出日'],歸還日:r['歸還日'],items:[],slots:{}};order.push(key);}
     const gg=g[key]; gg.items.push(r);
     if(String(r['借出日'])<String(gg.借出日)) gg.借出日=r['借出日'];   // 期間取涵蓋範圍（僅供無需分段時顯示用）
