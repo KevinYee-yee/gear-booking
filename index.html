@@ -349,7 +349,7 @@
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081802';
+const APP_VERSION='2026081803';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -503,13 +503,23 @@ function groupResv(list){
   list.forEach(r=>{
     const name=(r['用途']||'').trim();
     const key=name?('P:'+name):('B:'+(r['批次']||r['id']));
-    if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],使用地點:r['使用地點'],借出日:r['借出日'],歸還日:r['歸還日'],items:[]};order.push(key);}
+    if(!g[key]){g[key]={key,用途:r['用途'],借用人:r['借用人'],部門:r['部門'],聯絡方式:r['聯絡方式'],使用地點:r['使用地點'],借出日:r['借出日'],歸還日:r['歸還日'],items:[],slots:{}};order.push(key);}
     const gg=g[key]; gg.items.push(r);
-    if(String(r['借出日'])<String(gg.借出日)) gg.借出日=r['借出日'];   // 期間取涵蓋範圍
+    if(String(r['借出日'])<String(gg.借出日)) gg.借出日=r['借出日'];   // 期間取涵蓋範圍（僅供無需分段時顯示用）
     if(String(r['歸還日'])>String(gg.歸還日)) gg.歸還日=r['歸還日'];
     if(r['借用人']!==gg.借用人) gg._multi=true;
+    const sk=r['借出日']+'→'+r['歸還日'];
+    gg.slots[sk]=(gg.slots[sk]||0)+1;
   });
-  return order.map(k=>g[k]);
+  return order.map(k=>{ const gg=g[k]; gg.slotList=Object.keys(gg.slots).sort(); return gg; });
+}
+// 同一專案若橫跨多個不相連的時段（例：9/3 一小時、9/4 一小時），
+// 資料夾標題不該顯示成一段誤導的連續區間，改列出實際的每個時段
+function periodLabel(g){
+  if(g.slotList.length<=1) return `${g['借出日']} → ${g['歸還日']}`;
+  return `${g.slotList.length} 個時段：`+g.slotList.map(sk=>{
+    const [s,e]=sk.split('→'); return `${fmtShort(s)}–${fmtShort(e)}`;
+  }).join('、');
 }
 function grpBorrower(g){return g._multi?'多位借用人':g['借用人'];}
 function grpPending(g){return g.items.filter(i=>i['狀態']==='待審核');}
@@ -778,7 +788,7 @@ function renderMyResv(){
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'my')">▶</span>
         <div class="grow" onclick="toggleResvIdx(${idx},'my')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span></div>
-          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${periodLabel(g)}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
         ${canEdit?`<button class="btn sm" onclick="openEditProject(${idx},'my')">✏️ 調整需求</button>`:''}
       </div>
       ${open?`<div class="variants">${items}</div>`:''}
@@ -812,7 +822,7 @@ function renderAdmin(){
         <span class="caret ${open?'open':''}" onclick="toggleResvIdx(${idx},'ad')">▶</span>
         <div class="grow" onclick="toggleResvIdx(${idx},'ad')" style="cursor:pointer;min-width:180px">
           <div class="t">📁 ${title} <span class="cat-tag">${g.items.length} 項</span>${overdue?' <span class="badge b-dead"><span class="dot"></span>逾期</span>':''}</div>
-          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${g['借出日']} → ${g['歸還日']}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
+          <div class="meta">${grpBorrower(g)} · ${g['部門']} ｜ ${periodLabel(g)}${g['聯絡方式']?` ｜ ✉️ ${g['聯絡方式']}`:''}${g['使用地點']?` ｜ 📍 ${g['使用地點']}`:''} ｜ ${statusSummary(g.items)}</div></div>
         <button class="btn sm" onclick="printProject(${idx})">🖨️ 列印</button>
         ${(pend.length||appr.length)?`<button class="btn sm" onclick="openEditProject(${idx},'ad')">✏️ 調整需求</button>`:''}
         ${pend.length?`<button class="btn sm gd" onclick="approveAll(${idx})">全部批准</button><button class="btn sm rd" onclick="rejectAll(${idx})">全部拒絕</button>`:''}
@@ -1082,6 +1092,8 @@ function openEditProject(idx,scope){
   const g=arr[idx]; if(!g) return;
   const liveItems=g.items.filter(i=>['待審核','已核准'].includes(i['狀態']));
   if(!liveItems.length) return toast('這個專案沒有可調整的項目','err');
+  const liveSlots=new Set(liveItems.map(i=>i['借出日']+'→'+i['歸還日']));
+  if(liveSlots.size>1) return toast('這個專案橫跨多個不同時段，調整功能目前只能處理單一時段，請改用單項核准/拒絕或取消後重新分開送出','err');
   if(editMode){
     // 已經在調整別的（或同一個）專案：不能再暫存一次，否則會把「調整中、還沒存檔」的暫時清單
     // 誤存成「原本真正的借用清單」，真正的清單就救不回來了。只在第一次進入調整模式時暫存。
@@ -1140,9 +1152,11 @@ function printProject(idx){
     const s=eq?catStyle(eq['分類']):{e:'📦'};
     const thumb=eq&&eq['照片網址']?`<img class="pp-thumb" src="${eq['照片網址']}">`:`<div class="pp-thumb-ph">${s.e}</div>`;
     const acc=eq?accList(eq['附帶']):[];
+    const showOwnTime=g.slotList.length>1;  // 專案橫跨多個時段時，每項要各自標時間，不能只看上面的總期間
     return `<div class="pp-item">${thumb}
       <div style="flex:1">
         <div class="pp-name">☐ ${r['器材名稱']} ×${Number(r['數量'])||1}　<span style="font-weight:400;color:#777">(${r['狀態']})</span></div>
+        ${showOwnTime?`<div class="pp-acc">🕐 ${fmtShort(r['借出日'])}–${fmtShort(r['歸還日'])}</div>`:''}
         ${acc.length?`<div class="pp-acc">內含：${acc.map(a=>'☐ '+a).join('　')}</div>`:''}
       </div></div>`;
   }).join('');
@@ -1153,7 +1167,7 @@ function printProject(idx){
       <div><b>專案</b>${g['用途']||grpBorrower(g)}</div>
       <div><b>借用人</b>${grpBorrower(g)}（${g['部門']}）</div>
       <div><b>Email</b>${g['聯絡方式']||'—'}</div>
-      <div><b>期間</b>${g['借出日']} → ${g['歸還日']}</div>
+      <div><b>期間</b>${periodLabel(g)}</div>
       <div><b>地點</b>${g['使用地點']||'—'}</div>
     </div>
     ${rows}
