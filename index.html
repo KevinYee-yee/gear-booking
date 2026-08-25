@@ -342,14 +342,14 @@
 
 <div class="updatebar" id="updateBar">
   🔄 系統已更新到最新版本，請先儲存目前操作，稍候會自動重新整理
-  <button class="btn sm pri" onclick="location.reload()">立即重新整理</button>
+  <button class="btn sm pri" onclick="forceFreshReload()">立即重新整理</button>
 </div>
 
 <div id="printArea"></div>
 
 <script>
 // 每次部署都要手動改這個版本號，用來偵測「頁面開著沒關的人」有沒有拿到最新版
-const APP_VERSION='2026081804';
+const APP_VERSION='2026081805';
 
 const API_URL = localStorage.getItem('gear_api') ||
   'https://script.google.com/macros/s/AKfycbzXdWHMQ9p7bKmtxaXU9NMnUT1kt6_yVFTmqCsnBsgFiipZjCBGovrnwkufCebUtkYA/exec';
@@ -1339,11 +1339,15 @@ function showUpdateBar(){
   document.getElementById('updateBar').classList.add('on');
   scheduleAutoReload();
 }
+// 用帶亂數參數的網址跳轉，而不是單純 location.reload()。
+// reload() 仍會照瀏覽器原本的快取規則走，不保證真的抓新檔案（這就是「開無痕才有效」的原因）；
+// 換一個「不曾快取過」的網址，瀏覽器就一定會重新跟伺服器要新的。
+function forceFreshReload(){ location.href=location.pathname+'?v='+Date.now(); }
 function scheduleAutoReload(){
   clearTimeout(updateTimer);
   updateTimer=setTimeout(()=>{
     if(document.querySelector('.overlay.on')){ scheduleAutoReload(); return; } // 有視窗開著先不強制，等關掉再重整
-    location.reload();
+    forceFreshReload();
   },6000);
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkForUpdate(); });
