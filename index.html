@@ -419,8 +419,20 @@ function fmtShort(dt){
   const [d,t]=String(dt).split(' '); const parts=d.split('-');
   return `${Number(parts[1])}/${Number(parts[2])}${t?' '+t:''}`;
 }
+// 沒選時段時，標出最近一筆還沒結束的已核准借用，免得「可借用」被誤會成未來也都能借
+function nextBooking(id){
+  const now=nowStr();
+  return DATA.reservations
+    .filter(r=>r['器材id']===id&&r['狀態']==='已核准'&&String(r['歸還日'])>now)
+    .sort((a,b)=>String(a['借出日'])<String(b['借出日'])?-1:1)[0];
+}
 function conflictNote(id){
-  if(!windowActive()) return '';
+  if(!windowActive()){
+    const nb=nextBooking(id);
+    if(!nb) return '';
+    const q=Number(nb['數量'])||1, stock=Number((DATA.equipment.find(x=>x.id===id)||{})['數量'])||1;
+    return `<div class="conflictnote">📅 近期已被借：${fmtShort(nb['借出日'])}–${fmtShort(nb['歸還日'])}${stock>1?` ×${q}`:''}</div>`;
+  }
   const {conflicts}=overlapInfo(id);
   if(!conflicts.length) return '';
   const txt=conflicts.slice(0,2).map(c=>`${fmtShort(c.s)}–${fmtShort(c.e)}`).join('、');
