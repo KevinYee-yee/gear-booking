@@ -374,10 +374,11 @@ let savedCart=null; // 進入調整模式時暫存的「真正待送出」購物
 let cart=JSON.parse(localStorage.getItem('gear_cart')||'{}');  // 器材id -> {id,名稱,數量,stock}；存 localStorage 重整不消失
 let editEquipId=null;
 
-const todayStr=()=>new Date().toISOString().slice(0,10);
 const pad2=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());  // 用本地時區，toISOString 是 UTC，台灣早上 8 點前會差一天
+const todayStr=()=>ymd(new Date());
 const nowStr=()=>{const d=new Date();return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+' '+pad2(d.getHours())+':'+pad2(d.getMinutes());};
-const addDays=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
+const addDays=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d);};
 let calStart=todayStr();
 
 async function api(action,params={},isPost=false){
@@ -400,8 +401,10 @@ async function load(){
   }
 }
 
-// ---- 查詢時段：沒選就看「此刻」，選了就看該時段是否會撞期 ----
-let queryStart=localStorage.getItem('gear_qstart')||'', queryEnd=localStorage.getItem('gear_qend')||'';
+// ---- 查詢時段：預設今天 09:00 → 明天 18:00；按清除才改看「此刻」----
+// 不記在 localStorage，每次開頁都重設，免得一直停在很久以前查過的日期
+localStorage.removeItem('gear_qstart'); localStorage.removeItem('gear_qend');
+let queryStart=todayStr()+' 09:00', queryEnd=addDays(todayStr(),1)+' 18:00';
 const windowActive=()=>!!(queryStart&&queryEnd);
 function overlapInfo(id){
   const win=windowActive();
@@ -907,12 +910,10 @@ function applyQuery(){
   const sd=document.getElementById('qStartDate').value, st=document.getElementById('qStartTime').value;
   const ed=document.getElementById('qEndDate').value, et=document.getElementById('qEndTime').value;
   queryStart=sd&&st?`${sd} ${st}`:''; queryEnd=ed&&et?`${ed} ${et}`:'';
-  localStorage.setItem('gear_qstart',queryStart); localStorage.setItem('gear_qend',queryEnd);
   render();
 }
 function clearQuery(){
   queryStart=''; queryEnd='';
-  localStorage.removeItem('gear_qstart'); localStorage.removeItem('gear_qend');
   render();
 }
 function setCat(c){filterCat=c;render();}
